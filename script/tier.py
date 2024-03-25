@@ -57,6 +57,15 @@ class Tier:
 
         self.__center_label()
 
+    def __has_overlap(self, other_region: pg.LinearRegionItem) -> bool:
+        if id(other_region) == id(self.region):
+            return False
+
+        sstart, send = self.region.getRegion()
+        ostart, oend = other_region.getRegion()
+
+        return ostart <= sstart <= oend or ostart <= send <= oend
+
     def __correct_overlap(self, other_region: pg.LinearRegionItem) -> None:
         if id(other_region) == id(self.region):
             return
@@ -78,8 +87,23 @@ class Tier:
         if id(region) != id(self.region):
             return
 
-        for n in self.neighboors:
+        overlaps = [self.__has_overlap(n) for n in self.neighboors]
+        nb_overlaps = overlaps.count(True)
+
+        # If we are overlaping with more than 1 region
+        # we let the use choose by themselves how to handle it,
+        # as we would either need to move the other region or
+        # change this region's duration, which would be annoying for
+        # the user if done automatically
+        if nb_overlaps != 1:
+            return
+
+        for i, n in enumerate(self.neighboors):
+            if not overlaps[i]:
+                continue
+
             self.__correct_overlap(n)
+            return
 
     def __center_label(self) -> None:
         self.label.setPos(stats.mean(self.region.getRegion()), -0.1)
