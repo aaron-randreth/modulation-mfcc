@@ -1,6 +1,18 @@
 import statistics as stats
 from typing import Callable
+from PyQt5.QtCore import pyqtSignal as sig
 import pyqtgraph as pg
+from pyqtgraph.GraphicsScene.mouseEvents import HoverEvent
+
+class HoverSignalRegion(pg.LinearRegionItem):
+    sigMouseHover = sig(HoverEvent)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def hoverEvent(self, event):
+        self.sigMouseHover.emit(event)
+        super().hoverEvent(event)
 
 class Tier:
     region: pg.LinearRegionItem
@@ -20,12 +32,15 @@ class Tier:
         self.label.setFont(tier_label_font) 
         self.label.setPos((start_time + end_time) / 2, -0.1) 
 
-        self.region = pg.LinearRegionItem(values=(start_time, end_time),
+        # LinearREgionItem
+        self.region = HoverSignalRegion(values=(start_time, end_time),
                                               pen=tier_pen)#, brush=tier_brush)
         self.region.sigRegionChanged.connect(lambda r:
                                                     self.__region_changed(r))
         self.region.sigRegionChangeFinished.connect(lambda r:
                                                     self.__region_change_finished(r))
+
+        #self.region.sigMouseHover.connect(lambda x:)
 
         self.neighboors = set()
 
