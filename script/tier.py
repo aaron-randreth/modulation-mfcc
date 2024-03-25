@@ -33,6 +33,18 @@ class Tier:
         plot.addItem(self.region)
         plot.addItem(self.label)
 
+    def get_times(self) -> tuple[float, float]:
+        """
+        @Returns The selected start and end time
+        """
+        return self.region.getRegion()
+
+    def get_text(self) -> str:
+        return self.label.toPlainText()
+
+    def set_text(self, label : str) -> None:
+        self.label.setPlainText(label)
+
     def add_neighboors(self, neighboors: list['Tier']) -> None:
         for n in neighboors:
             self.add_neighboor(n)
