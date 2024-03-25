@@ -10,6 +10,9 @@ from PyQt5.QtWidgets import QToolBar, QAction
 from tier import Tier
 
 class AudioAnalyzer(QMainWindow):
+    # Key: tier name
+    tiers : dict[str, list[Tier]]
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Audio Analyzer")
@@ -44,9 +47,15 @@ class AudioAnalyzer(QMainWindow):
         self.reset_button = QPushButton('Reset Measurements')
         self.reset_button.clicked.connect(self.reset_measurements)
         layout.addWidget(self.reset_button, 6, 0) 
-        self.annotation_button = QPushButton('Load TextGrid Annotation')
+
+        self.annotation_button = QPushButton('Load Textgrid Annotation')
         self.annotation_button.clicked.connect(self.load_annotation)
         layout.addWidget(self.annotation_button, 5, 0) 
+
+        self.annotation_save_button = QPushButton('Save TextGrid Annotation')
+        self.annotation_save_button.clicked.connect(self.save_annotations)
+        layout.addWidget(self.annotation_save_button, 7, 0)
+
         self.coordinates_widget = QWidget()
         coordinates_layout = QVBoxLayout(self.coordinates_widget)
         layout.addWidget(self.coordinates_widget, 0, 2, 2, 1) 
@@ -69,6 +78,8 @@ class AudioAnalyzer(QMainWindow):
             self.duration_text.setText(f"Durée sélectionnée : {duration:.2f} s")
         self.region.sigRegionChanged.connect(update_duration)
         update_duration()
+
+        self.tiers = {}
 
     def mouse_clicked(self, event):
         if self.plot_widget.sceneBoundingRect().contains(event.scenePos()):
@@ -147,6 +158,29 @@ class AudioAnalyzer(QMainWindow):
         self.plot_widget.addItem(self.region)
         self.region.sigRegionChanged.connect(self.region_changed)
 
+    def save_annotations(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save TextGrid File", "", "TextGrid Files (*.TextGrid)")
+        tg = tgt.core.TextGrid(file_path)
+
+        for tname, intervals in self.tiers.items():
+            start = min([el.get_times()[0] for el in intervals])
+            end = max([el.get_times()[1] for el in intervals])
+
+            #start = min(intervals, key=lambda i : i.get_times()[0])
+            #end = max(intervals, key=lambda i : i.get_times()[1])
+
+            tier = tgt.core.IntervalTier(start, end, tname)
+
+            for el in intervals:
+                start, end = el.get_times()
+                label = el.get_text()
+                tier.add_interval(tgt.core.Interval(start, end, label))
+
+            tg.add_tier(tier)
+
+        # Does not include empty intervals
+        tgt.io.write_to_file(tg, file_path, format="long")
+
 
     def load_annotation(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)")
@@ -172,6 +206,8 @@ class AudioAnalyzer(QMainWindow):
             tplot.setXRange(min(tier.intervals, key=lambda x: x.start_time).start_time,
                                           max(tier.intervals, key=lambda x: x.end_time).end_time, padding=0)
             tplot.setYRange(-0.2, 1) 
+
+            self.tiers[tname] = interval_regions
 
     def create_tier_annotations(self, tier) -> list:
         return [
