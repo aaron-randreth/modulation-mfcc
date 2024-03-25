@@ -6,6 +6,9 @@ from scipy import signal
 from librosa import load, feature as lf
 import tgt  
 from PyQt5.QtWidgets import QToolBar, QAction
+
+from tier import Tier
+
 class AudioAnalyzer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -147,54 +150,34 @@ class AudioAnalyzer(QMainWindow):
 
     def load_annotation(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)")
-        if file_path:
-            self.show_annotation(file_path)
-            self.show_annotationphones(file_path)
-    def show_annotation(self, file_path):
+        if not file_path:
+            return
+
+        tier_names = {
+                "words" : self.ax_annotation,
+                "phones" : self.ax_annotation2
+                }
         text_grid = tgt.io.read_textgrid(file_path)
-        tier_name = "words"  
-        tier = text_grid.get_tier_by_name(tier_name)
 
-        self.ax_annotation.clear() 
-        for interval in tier.intervals:
-            start_time = interval.start_time
-            end_time = interval.end_time
-            label = interval.text
+        for tname, tplot in tier_names.items():
 
-            self.ax_annotation.addItem(pg.InfiniteLine(pos=start_time, angle=90, pen=pg.mkPen('g', width=2)))  
-            self.ax_annotation.addItem(pg.InfiniteLine(pos=end_time, angle=90, pen=pg.mkPen('g', width=2))) 
+            tier = text_grid.get_tier_by_name(tname)
+            interval_regions = self.create_tier_annotations(tier)
             
-            text_item = pg.TextItem(text=label, color=(255, 255, 255), anchor=(0.5, 1))
-            text_item.setFont(pg.QtGui.QFont("Arial", 20)) 
-            self.ax_annotation.addItem(text_item)
-            text_item.setPos((start_time + end_time) / 2, -0.1) 
-        self.ax_annotation.setXRange(min(tier.intervals, key=lambda x: x.start_time).start_time,
-                                      max(tier.intervals, key=lambda x: x.end_time).end_time, padding=0)
-        self.ax_annotation.setYRange(-0.2, 1) 
-    def show_annotationphones(self, file_path):
-        text_grid = tgt.io.read_textgrid(file_path)
-        tier_name = "phones"
-        tier = text_grid.get_tier_by_name(tier_name)
+            tplot.clear()
+            for el in interval_regions:
+                el.plot(tplot)
+                el.add_neighboors(interval_regions)
 
-        self.ax_annotation2.clear()
+            tplot.setXRange(min(tier.intervals, key=lambda x: x.start_time).start_time,
+                                          max(tier.intervals, key=lambda x: x.end_time).end_time, padding=0)
+            tplot.setYRange(-0.2, 1) 
 
-        for interval in tier.intervals:
-            start_time = interval.start_time
-            end_time = interval.end_time
-            label = interval.text
-
-            self.ax_annotation2.addItem(pg.InfiniteLine(pos=start_time, angle=90, pen=pg.mkPen('g', width=2)))  # Début du mot
-            self.ax_annotation2.addItem(pg.InfiniteLine(pos=end_time, angle=90, pen=pg.mkPen('g', width=2)))  # Fin du mot
-            
-            text_item = pg.TextItem(text=label, color=(255, 255, 255), anchor=(0.5, 1))
-            text_item.setFont(pg.QtGui.QFont("Arial", 14)) 
-            self.ax_annotation2.addItem(text_item)
-            text_item.setPos((start_time + end_time) / 2, -0.1) 
-
-        self.ax_annotation2.setXRange(min(tier.intervals, key=lambda x: x.start_time).start_time,
-                                      max(tier.intervals, key=lambda x: x.end_time).end_time, padding=0)
-        self.ax_annotation2.setYRange(-0.2, 1) 
-
+    def create_tier_annotations(self, tier) -> list:
+        return [
+            Tier(interval.start_time, interval.end_time, interval.text)
+            for interval in tier.intervals
+        ]
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
