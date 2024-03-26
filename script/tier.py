@@ -29,7 +29,9 @@ class HoverSignalRegion(pg.LinearRegionItem):
 class Tier:
     region: pg.LinearRegionItem
     label: pg.TextItem
-    neighboors: set[pg.LinearRegionItem]
+    neighboors: set[pg.LinearRegionItem] = set()
+    initial_pos: tuple[float, float]
+    started_moving: bool = False
 
     def __init__(self, start_time: float, end_time: float, label: str) -> None:
         tier_pen = pg.mkPen("g", width=2)
@@ -54,8 +56,6 @@ class Tier:
         )
 
         # self.region.sigMouseHover.connect(lambda x:)
-
-        self.neighboors = set()
 
     def plot(self, plot) -> None:
         plot.addItem(self.region)
@@ -97,6 +97,10 @@ class Tier:
 
         self.__center_label()
 
+        if not self.started_moving:
+            self.initial_pos = self.region.getRegion()
+            self.started_moving = True
+
     def __has_overlap(self, other_region: pg.LinearRegionItem) -> bool:
         if id(other_region) == id(self.region):
             return False
@@ -130,10 +134,12 @@ class Tier:
         nb_overlaps = overlaps.count(True)
 
         # If we are overlaping with more than 1 region
-        # we let the use choose by themselves how to handle it,
-        # as we would either need to move the other region or
-        # change this region's duration, which would be annoying for
-        # the user if done automatically
+        # we put the interval back to its initial position
+        if nb_overlaps >= 2:
+            self.started_moving = False
+            self.__set_pos(self.initial_pos)
+            return
+
         if nb_overlaps != 1:
             return
 
