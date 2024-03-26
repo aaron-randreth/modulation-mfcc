@@ -148,7 +148,13 @@ class Tier:
                 continue
 
             self.__correct_overlap(n)
-            return
+            break
+
+        self.initial_pos = self.region.getRegion()
+
+    def __set_pos(self, coords: tuple[float, float]) -> None:
+        self.region.setRegion(coords)
+        self.__center_label()
 
     def __center_label(self) -> None:
         self.label.setPos(stats.mean(self.region.getRegion()), -0.1)
