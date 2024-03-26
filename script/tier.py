@@ -25,6 +25,9 @@ class HoverSignalRegion(pg.LinearRegionItem):
         self.sigMouseHover.emit(event)
         super().hoverEvent(event)
 
+    def __repr__(self) -> str:
+        return f"Region: {self.getRegion()}"
+
 
 class Tier:
     region: pg.LinearRegionItem
@@ -80,7 +83,7 @@ class Tier:
             self.add_neighboor(n)
 
     def add_neighboor(self, neighboor: "Tier") -> None:
-        if id(neighboor.region) == id(self.region):
+        if neighboor is self:
             return
 
         self.neighboors.add(neighboor.region)
@@ -92,28 +95,31 @@ class Tier:
     def __hash__(self) -> int:
         return hash((id(self.region), id(self.label)))
 
-    def __region_changed(self, region: pg.LinearRegionItem) -> None:
-        # Memory address comparaison :
-        if id(region) != id(self.region):
-            return
+    def __repr__(self) -> str:
+        return f"Tier: {self.region.getRegion()} - {self.label.toPlainText()
+}"
 
+    def __region_changed(self, region: pg.LinearRegionItem) -> None:
         self.__center_label()
 
         if not self.started_moving:
             self.initial_pos = self.region.getRegion()
             self.started_moving = True
 
-    def __has_overlap(self, other_region: pg.LinearRegionItem) -> bool:
-        if id(other_region) == id(self.region):
-            return False
-
-        sstart, send = self.region.getRegion()
-        ostart, oend = other_region.getRegion()
+    def __has_overlap_coords(self, coordsA: tuple[float, float], coordsB: tuple[float, float]) -> bool:
+        sstart, send = coordsA
+        ostart, oend = coordsB
 
         return ostart <= sstart <= oend or ostart <= send <= oend
 
+    def __has_overlap(self, other_region: pg.LinearRegionItem) -> bool:
+        if other_region is self.region:
+            return False
+
+        return self.__has_overlap_coords(self.region.getRegion(), other_region.getRegion())
+
     def __correct_overlap(self, other_region: pg.LinearRegionItem) -> None:
-        if id(other_region) == id(self.region):
+        if other_region is self.region:
             return
 
         sstart, send = self.region.getRegion()
@@ -125,21 +131,24 @@ class Tier:
         elif ostart <= send <= oend:
             delta = ostart - send
 
-        self.region.setRegion((sstart + delta, send + delta))
+        corrected_pos = (sstart + delta, send + delta)
 
-    def __region_change_finished(self, region: pg.LinearRegionItem) -> None:
-        # Memory address comparaison :
-        if id(region) != id(self.region):
+        # If the corrected position has overlaps too, we don't correct
+        if any(self.__has_overlap_coords(corrected_pos, n.getRegion())
+               for n in self.neighboors
+               if n is not other_region):
             return
 
+        self.region.setRegion(corrected_pos)
+
+    def __region_change_finished(self, region: pg.LinearRegionItem) -> None:
         overlaps = [self.__has_overlap(n) for n in self.neighboors]
         nb_overlaps = overlaps.count(True)
 
         # If we are overlaping with more than 1 region
         # we put the interval back to its initial position
         if nb_overlaps >= 2:
-            self.started_moving = False
-            self.__set_pos(self.initial_pos)
+            self.__snap_back()
             return
 
         if nb_overlaps != 1:
@@ -153,6 +162,15 @@ class Tier:
             break
 
         self.initial_pos = self.region.getRegion()
+
+    def __snap_back(self) -> None:
+        self.started_moving = False
+
+        # If the inital position had overlaps too, we keep the new position
+        if any([self.__has_overlap_coords(self.initial_pos, n.getRegion()) for n in self.neighboors]):
+            return
+
+        self.__set_pos(self.initial_pos)
 
     def __set_pos(self, coords: tuple[float, float]) -> None:
         self.region.setRegion(coords)
