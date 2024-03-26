@@ -29,7 +29,7 @@ class HoverSignalRegion(pg.LinearRegionItem):
 class Tier:
     region: pg.LinearRegionItem
     label: pg.TextItem
-    neighboors: set[pg.LinearRegionItem] = set()
+    neighboors: set[pg.LinearRegionItem]
     initial_pos: tuple[float, float]
     started_moving: bool = False
 
@@ -56,6 +56,8 @@ class Tier:
         )
 
         # self.region.sigMouseHover.connect(lambda x:)
+
+        self.neighboors = set()
 
     def plot(self, plot) -> None:
         plot.addItem(self.region)
