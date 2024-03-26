@@ -66,7 +66,12 @@ class AudioAnalyzer(QMainWindow):
         self.mean_std_label = QLabel()
         coordinates_layout.addWidget(self.mean_std_label)
         self.coordinates_list = []
+
         self.plot_widget.scene().sigMouseClicked.connect(self.mouse_clicked)
+        self.ax_annotation2.scene().sigMouseClicked.connect(lambda e:
+                                        self.tier_plot_clicked(self.ax_annotation2, e))
+        #self.plot_widget.scene().sigMouseClicked.connect(self.mouse_clicked)
+
         self.region = pg.LinearRegionItem()
         self.region.setMovable(True) 
         self.plot_widget.addItem(self.region)
@@ -104,9 +109,15 @@ class AudioAnalyzer(QMainWindow):
                                         f"Eventdur : {mean_distance:.2f}\n{distances_text}")
 
             self.plot_widget.addItem(pg.ScatterPlotItem(x=[x], y=[y], symbol='x', size=10, pen=pg.mkPen(None), brush=(255, 255, 255)))
+        
+    def tier_plot_clicked(self, tier_plot, event):
+        if not tier_plot.sceneBoundingRect().contains(event.scenePos()):
+            return
 
+        mouse_point = tier_plot.vb.mapSceneToView(event.scenePos())
 
-
+        x, y = mouse_point.x(), mouse_point.y()
+        self.add_interval(x, 1, "test", tier_plot, "phones")
 
     def reset_measurements(self):
         self.coordinates_list = []
@@ -157,6 +168,24 @@ class AudioAnalyzer(QMainWindow):
         self.region = pg.LinearRegionItem()
         self.plot_widget.addItem(self.region)
         self.region.sigRegionChanged.connect(self.region_changed)
+
+    def add_interval(self, start_time: float, default_duration: float, 
+                      tier_label: str, plot, parent_tier_name : str) -> None:
+        new_tier_interval = Tier(start_time, start_time + default_duration,
+                                 tier_label)
+
+        if parent_tier_name not in self.tiers: 
+            self.tiers[parent_tier_name] = []
+
+        new_tier_interval.add_neighboors(self.tiers[parent_tier_name])
+        for el in self.tiers[parent_tier_name]:
+            el.add_neighboors([new_tier_interval])
+
+        self.tiers[parent_tier_name].append(new_tier_interval)
+        new_tier_interval.plot(plot)
+
+    def remove_interval(self, interval, plot, parent_tier_name):
+        pass
 
     def save_annotations(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save TextGrid File", "", "TextGrid Files (*.TextGrid)")
