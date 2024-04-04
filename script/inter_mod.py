@@ -3,7 +3,8 @@ import sys
 from scipy import signal
 from librosa import load, feature as lf
 import numpy as np
-
+from scipy.signal import find_peaks
+import numpy as np
 from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtWidgets import (
     QApplication,
@@ -23,9 +24,10 @@ pg.setConfigOptions(foreground="black", background="w")
 import tgt
 
 from praat_py_ui import (
-        tiers as ui_tiers,
-        textgridtools as ui_tgt,
+    tiers as ui_tiers,
+    textgridtools as ui_tgt,
 )
+
 
 
 class AudioAnalyzer(QMainWindow):
@@ -71,6 +73,10 @@ class AudioAnalyzer(QMainWindow):
         self.plot_widget.addItem(self.region)
         self.duration_text = pg.TextItem(anchor=(0.5, 2.5))
         self.plot_widget.addItem(self.duration_text)
+        self.analysis_button = QPushButton("Analyse Maximum")
+        self.analysis_button.clicked.connect(self.analyse_maximum)
+        self.layout.addWidget(self.analysis_button, 7, 0)  
+
 
         def update_duration():
             region_values = self.region.getRegion()
@@ -144,6 +150,55 @@ class AudioAnalyzer(QMainWindow):
                     brush=(255, 255, 255),
                 )
             )
+    def find_maxima_in_interval(interval_values, time, min_distance=None):
+        if min_distance is None:
+            maxima_indices, _ = find_peaks(interval_values)
+            peak_times = time[maxima_indices]
+            time_gaps = np.diff(peak_times)
+            print(peak_times)
+            if len(time_gaps) > 0:
+                q75, q10 = np.percentile(time_gaps, [100,10])
+                iqr = q75 - q10 -0.03
+                min_distance = iqr
+                print(iqr)
+            else:
+                min_distance = 0
+
+        min_distance_points = max(int(min_distance * len(interval_values) / (time[-1] - time[0])), 1)
+        
+        maxima_indices, _ = find_peaks(interval_values, distance=min_distance_points, prominence=0.3)
+        maxima_times = time[maxima_indices]
+        maxima_values = interval_values[maxima_indices]
+
+        if len(maxima_values) > 2:
+            avg_max = np.mean(maxima_values[1:-1])
+        else:
+            avg_max = np.mean(maxima_values)
+
+        return len(maxima_indices[1:-1]), maxima_times, avg_max
+    def analyse_maximum(self):
+        if self.textgrid is not None:
+
+            selected_interval = self.get_selected_tier_interval()
+
+            if selected_interval:
+                start_time, end_time = selected_interval
+                start_index = int(start_time * self.fs)
+                end_index = int(end_time * self.fs)
+
+                start_index = max(0, start_index)
+                end_index = min(len(self.valeurs_mfcc) - 1, end_index)
+
+                interval_values = self.valeurs_mfcc[start_index:end_index]
+                interval_time = self.temps_mfcc[start_index:end_index]
+
+                num_maxima, maxima_times, avg_max = self.find_maxima_in_interval(interval_values, interval_time)
+
+            for max_time in maxima_times:
+                self.plot_widget.addItem(pg.PlotDataItem([max_time], [avg_max], symbol='o', symbolSize=10, pen=None, symbolBrush='r'))
+
+            self.mean_std_label.setText(f"Nombre de maxima: {num_maxima}, Temps des maxima: {maxima_times}, Valeur moyenne des maxima: {avg_max:.2f}")
+
 
     def tier_plot_clicked(self, tier_plot, event):
         if not tier_plot.sceneBoundingRect().contains(event.scenePos()):
@@ -225,6 +280,8 @@ class AudioAnalyzer(QMainWindow):
         self.region = pg.LinearRegionItem()
         self.plot_widget.addItem(self.region)
         self.region.sigRegionChanged.connect(self.region_changed)
+        self.valeurs_mfcc = valeurs  # Stockez les valeurs MFCC dans la classe
+        self.temps_mfcc = temps
 
     def add_interval(
         self,
