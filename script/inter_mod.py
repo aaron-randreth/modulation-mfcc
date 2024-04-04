@@ -57,6 +57,9 @@ class AudioAnalyzer(QMainWindow):
         self.coordinates_widget = QWidget()
         coordinates_layout = QVBoxLayout(self.coordinates_widget)
         layout.addWidget(self.coordinates_widget, 0, 2, 2, 1)
+        self.valeurs_mfcc = None
+        self.temps_mfcc = None
+        
 
         self.coordinates_label = QLabel("Mesures:")
         coordinates_layout.addWidget(self.coordinates_label)
@@ -153,6 +156,7 @@ class AudioAnalyzer(QMainWindow):
     def find_maxima_in_interval(interval_values, time, min_distance=None):
         if min_distance is None:
             maxima_indices, _ = find_peaks(interval_values)
+            print(interval_values)
             peak_times = time[maxima_indices]
             time_gaps = np.diff(peak_times)
             print(peak_times)
@@ -163,7 +167,7 @@ class AudioAnalyzer(QMainWindow):
                 print(iqr)
             else:
                 min_distance = 0
-
+        print(interval_values)
         min_distance_points = max(int(min_distance * len(interval_values) / (time[-1] - time[0])), 1)
         
         maxima_indices, _ = find_peaks(interval_values, distance=min_distance_points, prominence=0.3)
@@ -176,28 +180,50 @@ class AudioAnalyzer(QMainWindow):
             avg_max = np.mean(maxima_values)
 
         return len(maxima_indices[1:-1]), maxima_times, avg_max
+    def get_selected_tier_interval(self):
+        if self.textgrid is None:
+            return
+
+        first_tier = self.textgrid.get_tier_by_index(0)
+        for t in first_tier.get_elements():
+            if not t.get_name():
+                continue
+
+            return t
+
+        return None
+        
+############# ICI se trouve a la fois le moment ou on prend les valeurs de la modulation , et on effecture un peak picking basique je vais rajouter le percentil etc.
     def analyse_maximum(self):
-        if self.textgrid is not None:
+        if self.textgrid is None or self.valeurs_mfcc is None or self.temps_mfcc is None:
+            return
 
-            selected_interval = self.get_selected_tier_interval()
+        selected_interval = self.get_selected_tier_interval()
+        if selected_interval is None:
+            return
 
-            if selected_interval:
-                start_time, end_time = selected_interval
-                start_index = int(start_time * self.fs)
-                end_index = int(end_time * self.fs)
+        start_time = float(selected_interval.start_time)
+        end_time = float(selected_interval.end_time)
+        print(start_time, end_time)
+        fs = 200  
+        start_index = int(start_time * fs)
+        end_index = int(end_time * fs)
 
-                start_index = max(0, start_index)
-                end_index = min(len(self.valeurs_mfcc) - 1, end_index)
+        start_index = max(start_index, 0)
+        end_index = min(end_index, len(self.valeurs_mfcc))
 
-                interval_values = self.valeurs_mfcc[start_index:end_index]
-                interval_time = self.temps_mfcc[start_index:end_index]
+        interval_values = self.valeurs_mfcc[start_index:end_index]
+        print(interval_values)
+        interval_time = self.temps_mfcc[start_index:end_index]
+        print(interval_time)
 
-                num_maxima, maxima_times, avg_max = self.find_maxima_in_interval(interval_values, interval_time)
+        peaks, _ = find_peaks(interval_values)
 
-            for max_time in maxima_times:
-                self.plot_widget.addItem(pg.PlotDataItem([max_time], [avg_max], symbol='o', symbolSize=10, pen=None, symbolBrush='r'))
+        print("Peaks indices:", peaks)
+        print("Peaks values:", interval_values[peaks])
 
-            self.mean_std_label.setText(f"Nombre de maxima: {num_maxima}, Temps des maxima: {maxima_times}, Valeur moyenne des maxima: {avg_max:.2f}")
+                
+        num_maxima, maxima_times, avg_max = self.find_maxima_in_interval(interval_values, interval_time)
 
 
     def tier_plot_clicked(self, tier_plot, event):
@@ -264,6 +290,13 @@ class AudioAnalyzer(QMainWindow):
             myAbsDiff = np.sqrt(np.gradient(filtMffcs, axis=1) ** 2)
             totChange = np.sum(myAbsDiff, axis=0)
             totChange = signal.filtfilt(b1, a1, totChange)
+            self.valeurs_mfcc = totChange
+
+            temps = np.arange(len(totChange)) / 200.0  
+            self.temps_mfcc = temps
+
+            self.modulation_mfcc_plot(totChange)
+            print(totChange)
             self.modulation_mfcc_plot(totChange)
 
         except Exception as e:
