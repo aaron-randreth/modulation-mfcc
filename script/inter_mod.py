@@ -1,6 +1,10 @@
 import sys
+
+from scipy import signal
+from librosa import load, feature as lf
 import numpy as np
-import pyqtgraph as pg
+
+from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -11,17 +15,21 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QLabel,
 )
-from scipy import signal
-from librosa import load, feature as lf
-import tgt
-from PyQt5.QtWidgets import QToolBar, QAction
 
-from tier import Tier
+import pyqtgraph as pg
+
+pg.setConfigOptions(foreground="black", background="w")
+
+import tgt
+
+from praat_py_ui import (
+        tiers as ui_tiers,
+        textgridtools as ui_tgt,
+)
 
 
 class AudioAnalyzer(QMainWindow):
-    # Key: tier name
-    tiers: dict[str, list[Tier]]
+    textgrid: ui_tiers.TextGrid | None = None
 
     def __init__(self):
         super().__init__()
@@ -29,46 +37,25 @@ class AudioAnalyzer(QMainWindow):
         self.main_widget = QWidget(self)
         self.setCentralWidget(self.main_widget)
         layout = QGridLayout(self.main_widget)
+        self.layout = layout
+
         self.audio_file_label = QLabel("Aucun fichier audio chargé")
         layout.addWidget(self.audio_file_label, 0, 0, 1, 3)
+
         self.plot_widget = pg.PlotWidget()
         layout.addWidget(self.plot_widget, 1, 0, 1, 2)
+
         self.ax = self.plot_widget.getPlotItem()
         self.ax.setLabel("left", "Valeur de modulation")
         self.ax.setLabel("bottom", "Temps", units="s")
         self.ax.setMouseEnabled(y=False)
-        self.button = QPushButton("Load Audio File")
-        self.button.clicked.connect(self.load_audio)
-        layout.addWidget(self.button, 4, 0)
-        self.annotation_widget = pg.PlotWidget()
-        self.annotation_widget.setMaximumHeight(200)
-        layout.addWidget(self.annotation_widget, 2, 0)
-        self.ax_annotation = self.annotation_widget.getPlotItem()
-        self.ax_annotation.setLabel("bottom", "Temps", units="s")
-        self.ax_annotation.setMouseEnabled(y=False)
-        self.annotation_widget.setXLink(self.plot_widget)
-        self.annotation_widget2 = pg.PlotWidget()
-        self.annotation_widget2.setMaximumHeight(200)
-        layout.addWidget(self.annotation_widget2, 3, 0)
-        self.ax_annotation2 = self.annotation_widget2.getPlotItem()
-        self.ax_annotation2.setLabel("bottom", "Temps", units="s")
-        self.ax_annotation2.setMouseEnabled(y=False)
-        self.annotation_widget2.setXLink(self.plot_widget)
-        self.reset_button = QPushButton("Reset Measurements")
-        self.reset_button.clicked.connect(self.reset_measurements)
-        layout.addWidget(self.reset_button, 6, 0)
 
-        self.annotation_button = QPushButton("Load Textgrid Annotation")
-        self.annotation_button.clicked.connect(self.load_annotation)
-        layout.addWidget(self.annotation_button, 5, 0)
-
-        self.annotation_save_button = QPushButton("Save TextGrid Annotation")
-        self.annotation_save_button.clicked.connect(self.save_annotations)
-        layout.addWidget(self.annotation_save_button, 7, 0)
+        self.init_buttons()
 
         self.coordinates_widget = QWidget()
         coordinates_layout = QVBoxLayout(self.coordinates_widget)
         layout.addWidget(self.coordinates_widget, 0, 2, 2, 1)
+
         self.coordinates_label = QLabel("Mesures:")
         coordinates_layout.addWidget(self.coordinates_label)
         self.coordinates_list_label = QLabel()
@@ -78,10 +65,6 @@ class AudioAnalyzer(QMainWindow):
         self.coordinates_list = []
 
         self.plot_widget.scene().sigMouseClicked.connect(self.mouse_clicked)
-        self.ax_annotation2.scene().sigMouseClicked.connect(
-            lambda e: self.tier_plot_clicked(self.ax_annotation2, e)
-        )
-        # self.plot_widget.scene().sigMouseClicked.connect(self.mouse_clicked)
 
         self.region = pg.LinearRegionItem()
         self.region.setMovable(True)
@@ -98,6 +81,23 @@ class AudioAnalyzer(QMainWindow):
         update_duration()
 
         self.tiers = {}
+
+    def init_buttons(self):
+        self.button = QPushButton("Load Audio File")
+        self.button.clicked.connect(self.load_audio)
+        self.layout.addWidget(self.button, 3, 0)
+
+        self.reset_button = QPushButton("Reset Measurements")
+        self.reset_button.clicked.connect(self.reset_measurements)
+        self.layout.addWidget(self.reset_button, 4, 0)
+
+        self.annotation_button = QPushButton("Load Textgrid Annotation")
+        self.annotation_button.clicked.connect(self.load_annotations)
+        self.layout.addWidget(self.annotation_button, 5, 0)
+
+        self.annotation_save_button = QPushButton("Save TextGrid Annotation")
+        self.annotation_save_button.clicked.connect(self.save_annotations)
+        self.layout.addWidget(self.annotation_save_button, 6, 0)
 
     def mouse_clicked(self, event):
         if self.plot_widget.sceneBoundingRect().contains(event.scenePos()):
@@ -210,6 +210,7 @@ class AudioAnalyzer(QMainWindow):
             totChange = np.sum(myAbsDiff, axis=0)
             totChange = signal.filtfilt(b1, a1, totChange)
             self.modulation_mfcc_plot(totChange)
+
         except Exception as e:
             print(f"Error loading audio file: {e}")
 
@@ -234,79 +235,44 @@ class AudioAnalyzer(QMainWindow):
         parent_tier_name: str,
     ) -> None:
         new_tier_interval = Tier(start_time, start_time + default_duration, tier_label)
-
-        if parent_tier_name not in self.tiers:
-            self.tiers[parent_tier_name] = []
-
-        new_tier_interval.add_neighboors(self.tiers[parent_tier_name])
-        for el in self.tiers[parent_tier_name]:
-            el.add_neighboors([new_tier_interval])
-
-        self.tiers[parent_tier_name].append(new_tier_interval)
-        new_tier_interval.plot(plot)
+        #TODO
 
     def remove_interval(self, interval, plot, parent_tier_name):
         pass
+        #TODO
 
     def save_annotations(self):
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save TextGrid File", "", "TextGrid Files (*.TextGrid)"
-        )
-        tg = tgt.core.TextGrid(file_path)
-
-        for tname, intervals in self.tiers.items():
-            start = min([el.get_times()[0] for el in intervals])
-            end = max([el.get_times()[1] for el in intervals])
-
-            # start = min(intervals, key=lambda i : i.get_times()[0])
-            # end = max(intervals, key=lambda i : i.get_times()[1])
-
-            tier = tgt.core.IntervalTier(start, end, tname)
-
-            for el in intervals:
-                start, end = el.get_times()
-                label = el.get_text()
-                tier.add_interval(tgt.core.Interval(start, end, label))
-
-            tg.add_tier(tier)
-
-        # Does not include empty intervals
-        tgt.io.write_to_file(tg, file_path, format="long")
-
-    def load_annotation(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)"
-        )
-        if not file_path:
+        if self.textgrid is None:
+            #TODO Display pop up error
             return
 
-        tier_names = {"words": self.ax_annotation, "phones": self.ax_annotation2}
-        text_grid = tgt.io.read_textgrid(file_path)
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save TextGrid File", "", "TextGrid Files (*.TextGrid)"
+        )
 
-        for tname, tplot in tier_names.items():
+        if not filepath:
+            #TODO Display pop up error
+            return
+        
+        tgt_textgrid = self.textgrid.to_textgrid()
+        tgt.io.write_to_file(tgt_textgrid, filepath, format="long")
 
-            tier = text_grid.get_tier_by_name(tname)
-            interval_regions = self.create_tier_annotations(tier)
+    def load_annotations(self):
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)"
+        )
+        if not filepath:
+            #TODO Display pop up error
+            return
 
-            tplot.clear()
-            for el in interval_regions:
-                el.plot(tplot)
-                el.add_neighboors(interval_regions)
 
-            tplot.setXRange(
-                min(tier.intervals, key=lambda x: x.start_time).start_time,
-                max(tier.intervals, key=lambda x: x.end_time).end_time,
-                padding=0,
-            )
-            tplot.setYRange(-0.2, 1)
+        tgt_textgrid = tgt.io.read_textgrid(filepath)
+        self.textgrid = ui_tgt.TextgridTGTConvert().from_textgrid(tgt_textgrid,
+                                                               self.plot_widget)
 
-            self.tiers[tname] = interval_regions
+        self.layout.addWidget(self.textgrid, 2, 0)
 
-    def create_tier_annotations(self, tier) -> list:
-        return [
-            Tier(interval.start_time, interval.end_time, interval.text)
-            for interval in tier.intervals
-        ]
+
 
 
 if __name__ == "__main__":
