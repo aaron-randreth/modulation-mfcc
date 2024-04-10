@@ -2,7 +2,7 @@ from typing import Callable, override
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
 from pyqtgraph import PlotWidget
@@ -30,6 +30,8 @@ class Tier(PlotWidget):
     __end_time: float
     __tier_type: TierType.INTERVAL_TIER
     __converter = None  # TODO Type hint this
+    # (old position, new position)
+    ELEMENT_POSITION_CHANGED = pyqtSignal(float, float)
 
     def __init__(
         self,
@@ -55,6 +57,9 @@ class Tier(PlotWidget):
         self.setFixedHeight(200)
         self.setXRange(self.__start_time, self.__end_time)
         self.setLabel("bottom", "Temps", units="s")
+
+    def __eq__(self, other: "Tier") -> bool:
+        return self is other
 
     def __repr__(self) -> str:
         return f"'name : {self.__name}, limits: {self.__start_time} - {self.__end_time}'"
@@ -155,8 +160,10 @@ class PointTier(Tier):
 
     @override
     def change_element_position(self, marker: Marker, new_value: float) -> None:
+        previous_value = marker.position
         marker.position = new_value
         self.mlist.notify_marker_changed()
+        self.ELEMENT_POSITION_CHANGED.emit(previous_value, new_value)
 
     @override
     def keyPressEvent(self, event):
@@ -240,6 +247,7 @@ class IntervalTier(Tier):
         m1 = self.marker_to_display.inverse[line]
         m1.position = line.value()
         self.mlist.notify_marker_changed()
+        self.ELEMENT_POSITION_CHANGED.emit(previous_value, new_value)
 
     def __create_line(self, marker: Marker, movable: bool = True) -> pg.InfiniteLine:
         if marker in self.marker_to_display:
@@ -361,8 +369,10 @@ class IntervalTier(Tier):
             )
             return
 
+        previous_value = marker.position
         marker.position = new_value
         self.mlist.notify_marker_changed()
+        self.ELEMENT_POSITION_CHANGED.emit(previous_value, new_value)
 
 class TextGrid(QWidget):
     linked_plot: PlotWidget
@@ -409,7 +419,7 @@ class TextGrid(QWidget):
 
         self.__link_views()
 
-    def remove_tier(self, tier_index: int) -> None:
+    def remove_tier_by_idx(self, tier_index: int) -> None:
         if tier_index >= len(self.tiers):
             msg = f"Invalid tier index {tier_index} for nb tiers: {len(self.tiers)}."
             raise ValueError(msg)
@@ -433,7 +443,7 @@ class TextGrid(QWidget):
         if not tier_name:
             raise ValueError("The given tier_name was empty.")
 
-        return filer(lambda t: t.get_name() == tier_name, self.tiers)
+        return [t for t in self.tiers if t.get_name() == tier_name]
 
     def get_tier_by_index(self, tier_index: int) -> Tier:
         if tier_index >= len(self.tiers) or abs(tier_index) - 1 >= len(self.tiers):
@@ -441,6 +451,14 @@ class TextGrid(QWidget):
             raise ValueError(msg)
 
         return self.tiers[tier_index]
+
+    def get_tier_index(self, tier: Tier) -> int | None:
+        for i, t in enumerate(self.get_tiers()):
+            if t != tier:
+                continue
+            return i
+        
+        return None
 
     def to_textgrid(self):
         return self.__converter.to_textgrid(self)

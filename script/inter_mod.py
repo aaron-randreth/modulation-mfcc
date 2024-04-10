@@ -77,8 +77,11 @@ class AudioAnalyzer(QMainWindow):
         self.duration_text = pg.TextItem(anchor=(0.5, 2.5))
         self.plot_widget.addItem(self.duration_text)
         self.analysis_button = QPushButton("Analyse Maximum")
-        self.analysis_button.clicked.connect(self.analyse_maximum)
+        self.analysis_button.clicked.connect(self.calc_and_display_maximum_analysis)
         self.layout.addWidget(self.analysis_button, 7, 0)  
+
+        self.remove_tool = False
+        self.plot_peaks = None
 
 
 #ici le mouseclick
@@ -203,6 +206,88 @@ class AudioAnalyzer(QMainWindow):
             return t
 
         return None
+
+    def calc_and_display_maximum_analysis(self):
+        peak_times, peak_values = self.analyse_maximum()
+
+        if len(peak_times) == 0 or len(peak_values) == 0:
+            return
+
+        if self.textgrid is None:
+            return
+
+        peaks = list(self.textgrid.get_tiers_by_name("mfcc_peaks"))
+        
+        if len(peaks) > 1:
+            return
+
+        for p in peaks:
+            idx = self.textgrid.get_tier_index(p)
+
+            if idx is None:
+                continue
+
+            self.textgrid.remove_tier_by_idx(idx)
+
+        self.peak_tier = ui_tiers.PointTier("mfcc_peaks",
+            self.temps_mfcc[0], self.temps_mfcc[-1],
+            ui_tgt.PointTierTGTConvert()
+        )
+
+        self.textgrid.add_tier(self.peak_tier)
+
+        for t, v in zip(peak_times, peak_values):
+            self.peak_tier.add_element(ui_tiers.Marker(t))
+
+        import numpy as np
+
+        def find_nearest(array, value):
+            array = np.asarray(array)
+            value = float(value)
+            idx = (np.abs(array - value)).argmin()
+            return idx
+
+        def find_times(time_values, times_to_find):
+            times, values = np.asarray(time_values)
+            times_idx = [find_nearest(times, t) for t in times_to_find]
+
+            times = [times[i] for i in times_idx]
+            values = [values[i] for i in times_idx]
+
+            return times, values
+
+        def dsds():
+            plot_times_values = self.plot.getData()
+            peak_times = self.peak_tier.get_elements()
+            x, y = find_times(plot_times_values, peak_times)
+            self.plot_peaks.setData(x, y)
+
+        # import numpy as np
+
+        # distances = np.linalg.norm(self.plot.getData() - pos, axis=1)
+        # dataidx = np.argmin(distances)
+        # datapos = self.data[dataidx,:]
+        #
+        # print(self.plot.getData())
+
+        print(self.peak_tier)
+        self.peak_tier.ELEMENT_POSITION_CHANGED.connect(dsds)
+        
+        if self.plot_peaks is not None:
+            self.plot_peaks.setData(peak_times, peak_values)
+            # print(find_times(self.plot.getData()))
+            return
+
+        self.plot_peaks = pg.ScatterPlotItem(
+                x=peak_times,
+                y=peak_values,
+                symbol="x",
+                size=10,
+                pen=pg.mkPen('g'),  # Utiliser la couleur rouge pour les pics
+                brush=pg.mkBrush('b'),
+            )
+
+        self.plot_widget.addItem(self.plot_peaks)
         
 ############# ICI se trouve a la fois le moment ou on prend les valeurs de la modulation , et on effecture un peak picking basique je vais rajouter le percentil etc.
     def analyse_maximum(self):
@@ -257,19 +342,8 @@ class AudioAnalyzer(QMainWindow):
 
         print("Filtered Peaks times:", peak_times_final)
         print("Filtered Peaks values:", peak_values_final)
-        if len(peak_times_final) > 0 and len(peak_values_final) > 0:
-            # Ajouter les points des pics sur le graphique
-            self.plot_widget.addItem(
-                pg.ScatterPlotItem(
-                    x=peak_times_final,
-                    y=peak_values_final,
-                    symbol="x",
-                    size=10,
-                    pen=pg.mkPen('g'),  # Utiliser la couleur rouge pour les pics
-                    brush=pg.mkBrush('b'),
-                )
-            )
-
+        
+        return peak_times_final, peak_values_final
 
     def tier_plot_clicked(self, tier_plot, event):
         if not tier_plot.sceneBoundingRect().contains(event.scenePos()):
@@ -351,7 +425,7 @@ class AudioAnalyzer(QMainWindow):
         fs = 200
         temps = np.arange(0, len(valeurs)) / fs
         self.ax.clear()
-        self.ax.plot(temps, valeurs, pen="#FF5733")
+        self.plot = self.ax.plot(temps, valeurs, pen="#FF5733")
         self.ax.setTitle("Modulation MFCC")
         self.ax.showGrid(x=True, y=True)
 
@@ -369,7 +443,7 @@ class AudioAnalyzer(QMainWindow):
         plot,
         parent_tier_name: str,
     ) -> None:
-        new_tier_interval = Tier(start_time, start_time + default_duration, tier_label)
+        new_tier_interval = ui_tiers.Tier(start_time, start_time + default_duration, tier_label)
         #TODO
 
     def remove_interval(self, interval, plot, parent_tier_name):
