@@ -116,7 +116,7 @@ class AudioAnalyzer(QMainWindow):
         pass
 
     def remove_peak_on_click(self, event):
-        self.plot_widget.setCursor(Qt.CrossCursor)
+        self.plot_widget.setCursor(Qt.SizeFDiagCursor)
 
         mouse_point = self.ax.vb.mapSceneToView(event.scenePos())
         click_x = mouse_point.x()
