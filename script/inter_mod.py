@@ -1,4 +1,6 @@
 import sys
+from scipy.signal import argrelextrema
+from math import sqrt
 
 from scipy import signal
 from librosa import load, feature as lf
@@ -22,7 +24,7 @@ import pyqtgraph as pg
 pg.setConfigOptions(foreground="black", background="w")
 
 import tgt
-
+from PyQt5.QtCore import Qt  
 from praat_py_ui import (
     tiers as ui_tiers,
     textgridtools as ui_tgt,
@@ -59,6 +61,7 @@ class AudioAnalyzer(QMainWindow):
         layout.addWidget(self.coordinates_widget, 0, 2, 2, 1)
         self.valeurs_mfcc = None
         self.temps_mfcc = None
+        self.init_toolbar()
         
 
         self.coordinates_label = QLabel("Mesures:")
@@ -68,9 +71,6 @@ class AudioAnalyzer(QMainWindow):
         self.mean_std_label = QLabel()
         coordinates_layout.addWidget(self.mean_std_label)
         self.coordinates_list = []
-
-        self.plot_widget.scene().sigMouseClicked.connect(self.mouse_clicked)
-
         self.region = pg.LinearRegionItem()
         self.region.setMovable(True)
         self.plot_widget.addItem(self.region)
@@ -81,6 +81,8 @@ class AudioAnalyzer(QMainWindow):
         self.layout.addWidget(self.analysis_button, 7, 0)  
 
 
+#ici le mouseclick
+        self.plot_widget.scene().sigMouseClicked.connect(self.remove_peak_on_click)
         def update_duration():
             region_values = self.region.getRegion()
             duration = region_values[1] - region_values[0]
@@ -90,7 +92,60 @@ class AudioAnalyzer(QMainWindow):
         update_duration()
 
         self.tiers = {}
+    def init_toolbar(self):
+        self.toolbar = QToolBar("Tools")
+        self.addToolBar(self.toolbar)
 
+        # Action pour ajouter un pic
+        add_action = QAction("Add Peak", self)
+        add_action.triggered.connect(self.add_peak)
+        self.toolbar.addAction(add_action)
+
+        remove_action = QAction("Remove Peak", self)
+        remove_action.triggered.connect(self.remove_peak_on_click)  # Connecter à la fonction remove_peak_on_click
+        self.toolbar.addAction(remove_action)
+
+
+        # Action pour déplacer un pic
+        move_action = QAction("Move Peak", self)
+        move_action.triggered.connect(self.move_peak)
+        self.toolbar.addAction(move_action)
+
+    def add_peak(self):
+        # Logique pour ajouter un pic
+        pass
+
+    def remove_peak_on_click(self, event):
+        self.plot_widget.setCursor(Qt.CrossCursor)
+
+        mouse_point = self.ax.vb.mapSceneToView(event.scenePos())
+        click_x = mouse_point.x()
+        click_y = mouse_point.y()
+
+        distance_threshold = 0.50 
+
+        items = self.plot_widget.items()
+        for item in items:
+            if isinstance(item, pg.ScatterPlotItem):
+                points_data = item.getData()
+                closest_distance = float('inf')
+                closest_index = None
+                for i in range(len(points_data[0])):
+                    point_x, point_y = points_data[0][i], points_data[1][i]
+                    distance = ((point_x - click_x) ** 2 + (point_y - click_y) ** 2) ** 0.5
+                    if distance < closest_distance:
+                        closest_distance = distance
+                        closest_index = i
+
+                if closest_index is not None and closest_distance < distance_threshold:
+                    updated_x = [x for j, x in enumerate(points_data[0]) if j != closest_index]
+                    updated_y = [y for j, y in enumerate(points_data[1]) if j != closest_index]
+                    item.setData(updated_x, updated_y)
+
+
+    def move_peak(self):
+        # Logique pour déplacer un pic
+        pass
     def init_buttons(self):
         self.button = QPushButton("Load Audio File")
         self.button.clicked.connect(self.load_audio)
@@ -108,51 +163,7 @@ class AudioAnalyzer(QMainWindow):
         self.annotation_save_button.clicked.connect(self.save_annotations)
         self.layout.addWidget(self.annotation_save_button, 6, 0)
 
-    def mouse_clicked(self, event):
-        if self.plot_widget.sceneBoundingRect().contains(event.scenePos()):
 
-            mouse_point = self.plot_widget.getPlotItem().vb.mapSceneToView(
-                event.scenePos()
-            )
-            x, y = mouse_point.x(), mouse_point.y()
-
-            self.coordinates_list.append((x, y))
-
-            distances = []
-            for i in range(1, len(self.coordinates_list)):
-                dist = self.coordinates_list[i][0] - self.coordinates_list[i - 1][0]
-                distances.append(dist)
-
-            mean_distance = np.mean(distances)
-
-            coordinates_text = "\n".join(
-                [
-                    f"X: {coord[0]:.2f}, Y: {coord[1]:.2f}"
-                    for coord in self.coordinates_list
-                ]
-            )
-            distances_text = "\n".join(
-                [f"Distance {i+1}: {distances[i]:.2f}" for i in range(len(distances))]
-            )
-            self.coordinates_list_label.setText(
-                f"Last Coordinate: X: {x:.2f}, Y: {y:.2f}\n{coordinates_text}"
-            )
-            self.mean_std_label.setText(
-                f"Meanch: {np.mean([coord[1] for coord in self.coordinates_list]):.2f}, "
-                f"Std Dev of Meanch: {np.std([coord[1] for coord in self.coordinates_list]):.2f}, "
-                f"Eventdur : {mean_distance:.2f}\n{distances_text}"
-            )
-
-            self.plot_widget.addItem(
-                pg.ScatterPlotItem(
-                    x=[x],
-                    y=[y],
-                    symbol="x",
-                    size=10,
-                    pen=pg.mkPen(None),
-                    brush=(255, 255, 255),
-                )
-            )
     def find_maxima_in_interval(interval_values, time, min_distance=None):
         if min_distance is None:
             maxima_indices, _ = find_peaks(interval_values)
@@ -161,7 +172,7 @@ class AudioAnalyzer(QMainWindow):
             time_gaps = np.diff(peak_times)
             print(peak_times)
             if len(time_gaps) > 0:
-                q75, q10 = np.percentile(time_gaps, [100,10])
+                q75, q10 = np.percentile(time_gaps, [75,5])
                 iqr = q75 - q10 -0.03
                 min_distance = iqr
                 print(iqr)
@@ -170,7 +181,7 @@ class AudioAnalyzer(QMainWindow):
         print(interval_values)
         min_distance_points = max(int(min_distance * len(interval_values) / (time[-1] - time[0])), 1)
         
-        maxima_indices, _ = find_peaks(interval_values, distance=min_distance_points, prominence=0.3)
+        maxima_indices, _ = find_peaks(interval_values, distance=min_distance_points, prominence=5)
         maxima_times = time[maxima_indices]
         maxima_values = interval_values[maxima_indices]
 
@@ -204,7 +215,6 @@ class AudioAnalyzer(QMainWindow):
 
         start_time = float(selected_interval.start_time)
         end_time = float(selected_interval.end_time)
-        print(start_time, end_time)
         fs = 200  
         start_index = int(start_time * fs)
         end_index = int(end_time * fs)
@@ -213,17 +223,52 @@ class AudioAnalyzer(QMainWindow):
         end_index = min(end_index, len(self.valeurs_mfcc))
 
         interval_values = self.valeurs_mfcc[start_index:end_index]
-        print(interval_values)
         interval_time = self.temps_mfcc[start_index:end_index]
-        print(interval_time)
 
-        peaks, _ = find_peaks(interval_values)
+        # Utiliser l'opérateur négatif sur les valeurs de l'intervalle pour trouver les minimums
+        min_peaks, _ = find_peaks(-interval_values)
 
-        print("Peaks indices:", peaks)
-        print("Peaks values:", interval_values[peaks])
+        initial_peaks, _ = find_peaks(interval_values)
+        if len(initial_peaks) > 1:
+            peak_times = interval_time[initial_peaks]
+            time_gaps = np.diff(peak_times)
 
-                
-        num_maxima, maxima_times, avg_max = self.find_maxima_in_interval(interval_values, interval_time)
+            q75, q25 = np.percentile(time_gaps, [100 ,10])
+            iqr = q75 - q25
+            min_distance_time = iqr - 0.03  
+            min_distance_samples = max(int(min_distance_time * len(interval_values) / (interval_time[-1] - interval_time[0])), 1)
+
+            peaks, _ = find_peaks(interval_values, distance=min_distance_samples, prominence=1)
+            peak_times_final = interval_time[peaks]
+            peak_values_final = interval_values[peaks]
+
+            # Vérifier si le dernier maximum dépasse le dernier minimum
+            if len(min_peaks) > 0 and len(peak_values_final) > 0:
+                last_max_index = peaks[-1]
+                last_min_index = min_peaks[-1]
+                if last_max_index > last_min_index:
+                    print("Le dernier maximum dépasse le dernier minimum.")
+                    peak_times_final = np.delete(peak_times_final, -1)
+                    peak_values_final = np.delete(peak_values_final, -1)
+        else:
+            peaks = initial_peaks
+            peak_times_final = interval_time[peaks] if len(peaks) > 0 else []
+            peak_values_final = interval_values[peaks] if len(peaks) > 0 else []
+
+        print("Filtered Peaks times:", peak_times_final)
+        print("Filtered Peaks values:", peak_values_final)
+        if len(peak_times_final) > 0 and len(peak_values_final) > 0:
+            # Ajouter les points des pics sur le graphique
+            self.plot_widget.addItem(
+                pg.ScatterPlotItem(
+                    x=peak_times_final,
+                    y=peak_values_final,
+                    symbol="x",
+                    size=10,
+                    pen=pg.mkPen('g'),  # Utiliser la couleur rouge pour les pics
+                    brush=pg.mkBrush('b'),
+                )
+            )
 
 
     def tier_plot_clicked(self, tier_plot, event):
