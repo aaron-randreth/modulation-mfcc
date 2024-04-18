@@ -98,7 +98,7 @@ class AudioAnalyzer(QMainWindow):
         toggle_manual_point_addition_action.triggered.connect(self.toggle_manual_point_addition)
         self.toolbar.addAction(toggle_manual_point_addition_action)
 #ici le mouseclick
-        self.plot_widget.scene().sigMouseClicked.connect(self.remove_peak_on_click)
+        # self.plot_widget.scene().sigMouseClicked.connect(self.remove_peak_on_click)
         self.plot_widget.scene().sigMouseClicked.connect(self.add_point_on_click)
 
         def update_duration():
@@ -166,38 +166,33 @@ class AudioAnalyzer(QMainWindow):
 
 
 
-    def remove_peak_on_click(self, event):
+    def remove_peak_on_click(self, clicked_scatter_plot, clicked_points):
         if not self.manual_peak_removal_enabled:
             return
 
         self.plot_widget.setCursor(Qt.PointingHandCursor)
 
-        mouse_point = self.ax.vb.mapSceneToView(event.scenePos())
-        click_x = mouse_point.x()
-        click_y = mouse_point.y()
+        points_data = list(clicked_scatter_plot.getData())
+        points_data[0] = list(points_data[0])
+        points_data[1] = list(points_data[1])
 
-        distance_threshold = 1 
+        to_remove = []
 
-        points_data = self.mfcc_points.getData()
-        closest_distance = float('inf')
-        closest_index = None
+        for point in clicked_points:
+            pos = point.viewPos()
 
-        for i, (point_x, point_y) in enumerate(zip(*points_data)):
-            distance = ((point_x - click_x) ** 2 + (point_y - click_y) ** 2) ** 0.5
-            if distance < closest_distance:
-                closest_distance = distance
-                closest_index = i
+            x_idx = points_data[0].index(pos.x())
 
-        if closest_index is None:
-            return
+            if points_data[1][x_idx] != pos.y():
+                continue
 
-        if closest_distance > distance_threshold:
-            return
+            to_remove.append(x_idx)
 
-        updated_x = [x for j, x in enumerate(points_data[0]) if j != closest_index]
-        updated_y = [y for j, y in enumerate(points_data[1]) if j != closest_index]
+        for idx in sorted(to_remove, reverse=True):
+            points_data[0].pop(idx)
+            points_data[1].pop(idx)
 
-        self.mfcc_points.setData(updated_x, updated_y)
+        clicked_scatter_plot.setData(*points_data)
 
 
     def move_peak(self):
@@ -324,6 +319,8 @@ class AudioAnalyzer(QMainWindow):
                     pen=pg.mkPen('g'),  
                     brush=pg.mkBrush('b'),
                 )
+
+            self.mfcc_points.sigClicked.connect(self.remove_peak_on_click)
 
             self.plot_widget.addItem(self.mfcc_points)
 
