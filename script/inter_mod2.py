@@ -110,6 +110,7 @@ class AudioAnalyzer(QMainWindow):
         update_duration()
 
         self.tiers = {}
+
     def init_toolbar(self):
         self.toolbar = QToolBar("Tools")
         self.addToolBar(self.toolbar)
@@ -129,6 +130,7 @@ class AudioAnalyzer(QMainWindow):
     def toggle_manual_point_addition(self, checked):
         # Méthode pour activer ou désactiver l'ajout de points
         self.manual_point_addition_enabled = checked
+
     def add_point_on_click(self, event):
         if self.manual_point_addition_enabled:
             mouse_point = self.plot_widget.getPlotItem().vb.mapSceneToView(
@@ -155,46 +157,47 @@ class AudioAnalyzer(QMainWindow):
                 f"Last Coordinate: X: {closest_x:.2f}, Y: {closest_y:.2f}\n{coordinates_text}"
             )
 
-            # Ajout du point sur le graphique
-            self.plot_widget.addItem(
-                pg.ScatterPlotItem(
-                    x=[closest_x],
-                    y=[closest_y],
-                    symbol="x",
-                    size=10,
-                    pen=pg.mkPen(None),
-                    brush=(0, 0, 0),
-                )
+            points_x, points_y = self.mfcc_points.getData()
+
+            self.mfcc_points.setData(
+                    np.append(points_x, closest_x),
+                    np.append(points_y, closest_y)
             )
 
 
+
     def remove_peak_on_click(self, event):
-        if self.manual_peak_removal_enabled:
-            self.plot_widget.setCursor(Qt.PointingHandCursor)
+        if not self.manual_peak_removal_enabled:
+            return
 
-            mouse_point = self.ax.vb.mapSceneToView(event.scenePos())
-            click_x = mouse_point.x()
-            click_y = mouse_point.y()
+        self.plot_widget.setCursor(Qt.PointingHandCursor)
 
-            distance_threshold = 1 
+        mouse_point = self.ax.vb.mapSceneToView(event.scenePos())
+        click_x = mouse_point.x()
+        click_y = mouse_point.y()
 
-            items = self.plot_widget.items()
-            for item in items:
-                if isinstance(item, pg.ScatterPlotItem):
-                    points_data = item.getData()
-                    closest_distance = float('inf')
-                    closest_index = None
-                    for i in range(len(points_data[0])):
-                        point_x, point_y = points_data[0][i], points_data[1][i]
-                        distance = ((point_x - click_x) ** 2 + (point_y - click_y) ** 2) ** 0.5
-                        if distance < closest_distance:
-                            closest_distance = distance
-                            closest_index = i
+        distance_threshold = 1 
 
-                    if closest_index is not None and closest_distance < distance_threshold:
-                        updated_x = [x for j, x in enumerate(points_data[0]) if j != closest_index]
-                        updated_y = [y for j, y in enumerate(points_data[1]) if j != closest_index]
-                        item.setData(updated_x, updated_y)
+        points_data = self.mfcc_points.getData()
+        closest_distance = float('inf')
+        closest_index = None
+
+        for i, (point_x, point_y) in enumerate(zip(*points_data)):
+            distance = ((point_x - click_x) ** 2 + (point_y - click_y) ** 2) ** 0.5
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_index = i
+
+        if closest_index is None:
+            return
+
+        if closest_distance > distance_threshold:
+            return
+
+        updated_x = [x for j, x in enumerate(points_data[0]) if j != closest_index]
+        updated_y = [y for j, y in enumerate(points_data[1]) if j != closest_index]
+
+        self.mfcc_points.setData(updated_x, updated_y)
 
 
     def move_peak(self):
@@ -313,8 +316,7 @@ class AudioAnalyzer(QMainWindow):
         print("Filtered Peaks values:", peak_values_final)
         if len(peak_times_final) > 0 and len(peak_values_final) > 0:
 
-            self.plot_widget.addItem(
-                pg.ScatterPlotItem(
+            self.mfcc_points = pg.ScatterPlotItem(
                     x=peak_times_final,
                     y=peak_values_final,
                     symbol="x",
@@ -322,7 +324,8 @@ class AudioAnalyzer(QMainWindow):
                     pen=pg.mkPen('g'),  
                     brush=pg.mkBrush('b'),
                 )
-            )
+
+            self.plot_widget.addItem(self.mfcc_points)
 
 
     def tier_plot_clicked(self, tier_plot, event):
