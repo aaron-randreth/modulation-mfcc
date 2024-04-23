@@ -11,10 +11,7 @@ from pyqtgraph.GraphicsScene.mouseEvents import HoverEvent
 
 from bidict import bidict
 
-from .markers import (
-        Marker, IntervalMarker,
-        MarkerList, IntervalMarkerList
-)
+from .markers import Marker, IntervalMarker, MarkerList, IntervalMarkerList
 
 
 class TierType(Enum):
@@ -23,6 +20,7 @@ class TierType(Enum):
 
 
 THEME_PEN = pg.mkPen("b", width=2)
+
 
 class Tier(PlotWidget):
     __name: str
@@ -49,12 +47,12 @@ class Tier(PlotWidget):
 
         self.__converter = converter
 
-        self.getAxis("left").setStyle(showValues=False, tickAlpha=0)
+        self.getAxis("left").setStyle(showValues=False, tickAlpha=0, tickTextWidth=60)
 
         self.setMouseEnabled(y=False)
         self.setYRange(0, 1)
+        self.setFixedHeight(100)
 
-        self.setFixedHeight(200)
         self.setXRange(self.__start_time, self.__end_time)
         self.setLabel("bottom", "Temps", units="s")
 
@@ -62,7 +60,9 @@ class Tier(PlotWidget):
         return self is other
 
     def __repr__(self) -> str:
-        return f"'name : {self.__name}, limits: {self.__start_time} - {self.__end_time}'"
+        return (
+            f"'name : {self.__name}, limits: {self.__start_time} - {self.__end_time}'"
+        )
 
     def get_name(self) -> str:
         return self.__name
@@ -184,9 +184,8 @@ class PointTier(Tier):
         elif event.key():
             line.label.setFormat(old_text + event.text())
 
-        self.marker_to_display[line].name = (
-            line.label.toPlainText()
-        )
+        self.marker_to_display[line].name = line.label.toPlainText()
+
 
 class IntervalTier(Tier):
     mlist: IntervalMarker
@@ -374,6 +373,7 @@ class IntervalTier(Tier):
         self.mlist.notify_marker_changed()
         self.ELEMENT_POSITION_CHANGED.emit(previous_value, new_value)
 
+
 class TextGrid(QWidget):
     linked_plot: PlotWidget
     __internal_vb: pg.ViewBox
@@ -457,11 +457,12 @@ class TextGrid(QWidget):
             if t != tier:
                 continue
             return i
-        
+
         return None
 
     def to_textgrid(self):
         return self.__converter.to_textgrid(self)
+
 
 # Points
 # - Ajout d'un marker nomé

@@ -3,15 +3,14 @@ from typing import Any, override
 
 import tgt
 
-from .markers import (
-        Marker, IntervalMarker,
-        MarkerList, IntervalMarkerList
-)
+from .markers import Marker, IntervalMarker, MarkerList, IntervalMarkerList
 
 from .tiers import (
-        TextGrid, PointTier,
-        IntervalTier,
+    TextGrid,
+    PointTier,
+    IntervalTier,
 )
+
 
 class TextgridConverter(ABC):
 
@@ -22,6 +21,7 @@ class TextgridConverter(ABC):
     @abstractmethod
     def from_textgrid(self, textgrid: Any) -> Any:
         pass
+
 
 class PointTierTGTConvert(TextgridConverter):
 
@@ -48,7 +48,7 @@ class PointTierTGTConvert(TextgridConverter):
             point_tier.add_element(point)
 
         return point_tier
-            
+
 
 class IntervalTierTGTConvert(TextgridConverter):
 
@@ -73,14 +73,14 @@ class IntervalTierTGTConvert(TextgridConverter):
         interval_tier = IntervalTier(it.name, it.start_time, it.end_time, self)
 
         for el in it.intervals:
-            interval = IntervalMarker.new_interval(el.start_time, el.end_time,
-                                                el.text)
+            interval = IntervalMarker.new_interval(el.start_time, el.end_time, el.text)
             interval_tier.add_element(interval)
 
         return interval_tier
 
+
 class TextgridTGTConvert(TextgridConverter):
-    valid_tier_types : dict[str, TextgridConverter]
+    valid_tier_types: dict[str, TextgridConverter]
 
     def __init__(self):
         self.valid_tier_types = {}
@@ -111,4 +111,3 @@ class TextgridTGTConvert(TextgridConverter):
             textgrid.add_tier(tier)
 
         return textgrid
-

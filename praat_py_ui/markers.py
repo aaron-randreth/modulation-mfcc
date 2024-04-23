@@ -2,6 +2,7 @@ from functools import total_ordering
 from typing import override
 from dataclasses import dataclass
 
+
 @total_ordering
 @dataclass
 class Marker:
@@ -85,6 +86,7 @@ class MarkerList:
     def notify_marker_changed(self) -> None:
         self.elements.sort()
 
+
 @dataclass
 class IntervalMarker:
     start_time: Marker
@@ -112,7 +114,7 @@ class IntervalMarker:
         return int(hash(self.start_time) + hash(self.end_time))
 
     def __repr__(self) -> str:
-        return f"{start_time} {end_time}"
+        return f"{self.start_time} {self.end_time}"
 
     def get_name(self) -> str:
         return self.start_time.name
