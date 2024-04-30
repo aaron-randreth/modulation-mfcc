@@ -30,7 +30,7 @@ from praat_py_ui import (
     textgridtools as ui_tgt,
 )
 
-
+from scrollable_window import Info, InfoBox, Output
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
@@ -57,33 +57,32 @@ class AudioAnalyzer(QMainWindow):
         self.ax.setLabel("bottom", "Temps", units="s")
         self.ax.setMouseEnabled(y=False)
 
-        self.init_buttons()
+        self.coordinates_widget = Info()
+        layout.addWidget(self.coordinates_widget, 1, 2)
 
-        self.coordinates_widget = QWidget()
-        coordinates_layout = QVBoxLayout(self.coordinates_widget)
-        layout.addWidget(self.coordinates_widget, 0, 2, 2, 1)
+        button_parent = self.button_container()
+        self.layout.addWidget(button_parent, 2, 2)
+
+        self.mean_std = Output("Mesures", "")
+
+        self.coordinates_widget.add_infobox(
+                InfoBox(
+                    "Calcul MFCC",
+                   dynamic_content=self.mean_std
+                )
+        )
+
         self.valeurs_mfcc = None
         self.temps_mfcc = None
         self.init_toolbar()
         self.manual_point_addition_enabled = False 
         self.manual_point_addition_enabled = False 
         
-
-        self.coordinates_label = QLabel("Mesures:")
-        coordinates_layout.addWidget(self.coordinates_label)
-        self.coordinates_list_label = QLabel()
-        coordinates_layout.addWidget(self.coordinates_list_label)
-        self.mean_std_label = QLabel()
-        coordinates_layout.addWidget(self.mean_std_label)
-        self.coordinates_list = []
         self.region = pg.LinearRegionItem()
         self.region.setMovable(True)
         self.plot_widget.addItem(self.region)
         self.duration_text = pg.TextItem(anchor=(0.5, 2.5))
         self.plot_widget.addItem(self.duration_text)
-        self.analysis_button = QPushButton("Analyse Maximum")
-        self.analysis_button.clicked.connect(self.analyse_maximum)
-        self.layout.addWidget(self.analysis_button, 7, 0)  
         toggle_manual_peak_removal_action = QAction("Toggle Manual Peak Removal", self)
         
         toggle_manual_peak_removal_action.setCheckable(True)
@@ -144,18 +143,9 @@ class AudioAnalyzer(QMainWindow):
             closest_y = self.valeurs_mfcc[closest_x_index]
 
             # Ajout du point trouvé sur le graphique et dans la liste des coordonnées
-            self.coordinates_list.append((closest_x, closest_y))
+            # self.coordinates_list.append((closest_x, closest_y))
 
             # Mise à jour de l'affichage des coordonnées
-            coordinates_text = "\n".join(
-                [
-                    f"X: {coord[0]:.2f}, Y: {coord[1]:.2f}"
-                    for coord in self.coordinates_list
-                ]
-            )
-            self.coordinates_list_label.setText(
-                f"Last Coordinate: X: {closest_x:.2f}, Y: {closest_y:.2f}\n{coordinates_text}"
-            )
 
             points_x, points_y = self.mfcc_points.getData()
 
@@ -198,23 +188,32 @@ class AudioAnalyzer(QMainWindow):
     def move_peak(self):
         # Logique pour déplacer un pic
         pass
-    def init_buttons(self):
+    def button_container(self) -> QWidget:
+        button_parent = QWidget()
+        layout = QVBoxLayout()
+
         self.button = QPushButton("Load Audio File")
-        self.button.clicked.connect(self.load_audio)
-        self.layout.addWidget(self.button, 3, 0)
-
-        self.reset_button = QPushButton("Reset Measurements")
-        self.reset_button.clicked.connect(self.reset_measurements)
-        self.layout.addWidget(self.reset_button, 4, 0)
-
         self.annotation_button = QPushButton("Load Textgrid Annotation")
-        self.annotation_button.clicked.connect(self.load_annotations)
-        self.layout.addWidget(self.annotation_button, 5, 0)
-
         self.annotation_save_button = QPushButton("Save TextGrid Annotation")
-        self.annotation_save_button.clicked.connect(self.save_annotations)
-        self.layout.addWidget(self.annotation_save_button, 6, 0)
+        self.analysis_button = QPushButton("Analyse Maximum")
 
+        # self.reset_button = QPushButton("Reset Measurements")
+        # self.reset_button.clicked.connect(self.reset_measurements)
+        # self.layout.addWidget(self.reset_button, 4, 0)
+
+        layout.addWidget(self.annotation_button)
+        layout.addWidget(self.button)
+        layout.addWidget(self.annotation_save_button)
+        layout.addWidget(self.analysis_button)  
+
+        self.button.clicked.connect(self.load_audio)
+        self.annotation_button.clicked.connect(self.load_annotations)
+        self.annotation_save_button.clicked.connect(self.save_annotations)
+        self.analysis_button.clicked.connect(self.analyse_maximum)
+
+        button_parent.setLayout(layout)
+
+        return button_parent
 
     def find_maxima_in_interval(interval_values, time, min_distance=None):
         if min_distance is None:
@@ -243,6 +242,7 @@ class AudioAnalyzer(QMainWindow):
             avg_max = np.mean(maxima_values)
 
         return len(maxima_indices[1:-1]), maxima_times, avg_max
+
     def get_selected_tier_interval(self):
         if self.textgrid is None:
             return
@@ -258,9 +258,11 @@ class AudioAnalyzer(QMainWindow):
         
 ############# ICI se trouve a la fois le moment ou on prend les valeurs de la modulation , et on effecture un peak picking basique je vais rajouter le percentil etc.
     def analyse_maximum(self):
+        print("heo")
         if self.textgrid is None or self.valeurs_mfcc is None or self.temps_mfcc is None:
             return
 
+        print("hei")
         selected_interval = self.get_selected_tier_interval()
         if selected_interval is None:
             return
@@ -322,6 +324,8 @@ class AudioAnalyzer(QMainWindow):
 
             self.mfcc_points.sigClicked.connect(self.remove_peak_on_click)
 
+            self.mean_std.update(round(np.mean(peak_values_final), 2))
+
             self.plot_widget.addItem(self.mfcc_points)
 
 
@@ -336,8 +340,6 @@ class AudioAnalyzer(QMainWindow):
 
     def reset_measurements(self):
         self.coordinates_list = []
-        self.coordinates_list_label.setText("")
-        self.mean_std_label.setText("")
 
         for item in self.plot_widget.items():
             if isinstance(item, pg.ScatterPlotItem):
@@ -394,7 +396,6 @@ class AudioAnalyzer(QMainWindow):
             temps = np.arange(len(totChange)) / 200.0  
             self.temps_mfcc = temps
 
-            self.modulation_mfcc_plot(totChange)
             print(totChange)
             self.modulation_mfcc_plot(totChange)
 
