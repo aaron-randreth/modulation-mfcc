@@ -196,6 +196,7 @@ class AudioAnalyzer(QMainWindow):
         self.annotation_button = QPushButton("Load Textgrid Annotation")
         self.annotation_save_button = QPushButton("Save TextGrid Annotation")
         self.analysis_button = QPushButton("Analyse Maximum")
+        self.analysismin_button = QPushButton("Analyse Minimum")
 
         # self.reset_button = QPushButton("Reset Measurements")
         # self.reset_button.clicked.connect(self.reset_measurements)
@@ -205,11 +206,13 @@ class AudioAnalyzer(QMainWindow):
         layout.addWidget(self.button)
         layout.addWidget(self.annotation_save_button)
         layout.addWidget(self.analysis_button)  
+        layout.addWidget(self.analysismin_button)  
 
         self.button.clicked.connect(self.load_audio)
         self.annotation_button.clicked.connect(self.load_annotations)
         self.annotation_save_button.clicked.connect(self.save_annotations)
         self.analysis_button.clicked.connect(self.analyse_maximum)
+        self.analysismin_button.clicked.connect(self.analyse_minimum)
 
         button_parent.setLayout(layout)
 
@@ -324,9 +327,85 @@ class AudioAnalyzer(QMainWindow):
 
             self.mfcc_points.sigClicked.connect(self.remove_peak_on_click)
 
-            self.mean_std.update(round(np.mean(peak_values_final), 2))
+            # Calculate mean and standard deviation
+            mean_value = np.mean(peak_values_final)
+            std_value = np.std(peak_values_final)
+
+            # Update the widget with the mean and standard deviation
+            self.mean_std.update(f"Mean: {mean_value:.2f}, Std: {std_value:.2f}")
 
             self.plot_widget.addItem(self.mfcc_points)
+            
+            
+            
+    def analyse_minimum(self):
+        if self.textgrid is None or self.valeurs_mfcc is None or self.temps_mfcc is None:
+            return
+
+        selected_interval = self.get_selected_tier_interval()
+        if selected_interval is None:
+            return
+
+        start_time = float(selected_interval.start_time)
+        end_time = float(selected_interval.end_time)
+        fs = 200  
+        start_index = int(start_time * fs)
+        end_index = int(end_time * fs)
+
+        start_index = max(start_index, 0)
+        end_index = min(end_index, len(self.valeurs_mfcc))
+
+        interval_values = self.valeurs_mfcc[start_index:end_index]
+        interval_time = self.temps_mfcc[start_index:end_index]
+
+        # Trouver les minimums dans l'intervalle
+        min_peaks, _ = find_peaks(-interval_values)  # Utiliser -interval_values pour trouver les minimums
+
+        # Si des minimums sont trouvés
+        if len(min_peaks) > 1:
+            # Extraire les valeurs des minimums
+            min_values = interval_values[min_peaks]
+            mean_min_value = np.mean(min_values)
+            std_min_value = np.std(min_values)
+
+            # Créer le texte avec les informations sur les minimums
+            min_info = f"Mean Min: {mean_min_value:.2f}, Std Min: {std_min_value:.2f}"
+
+            # Calculer les temps des minimums
+            min_times = interval_time[min_peaks]
+
+            # Calculer les distances entre les temps des minimums successifs
+            min_times_diff = np.diff(min_times)
+
+            # Calculer la moyenne et l'écart type des distances en termes de temps
+            mean_time_distance = np.mean(min_times_diff)
+            std_time_distance = np.std(min_times_diff)
+
+            min_info += f"\nMean Time Distance: {mean_time_distance:.2f},\n Std Time Distance: {std_time_distance:.2f}"
+
+        else:
+            # Si aucun minimum n'est trouvé, afficher un message indiquant l'absence de données sur les minimums
+            min_info = "No minimums found in the selected interval."
+
+        # Récupérer le texte actuel du widget
+        current_text = self.mean_std.text()
+
+        self.mean_std.update(min_info)
+
+        # Si le widget contient déjà du texte, ajoutez le nouveau texte en dessous
+        if current_text:
+            self.mean_std.update(f"\n{current_text}\n{min_info}")
+
+        self.mfcc_min_points = pg.ScatterPlotItem(
+            x=min_times,
+            y=min_values,
+            symbol="o",  # Utiliser un symbole différent pour les minimums, par exemple "o"
+            size=10,
+            pen=pg.mkPen('r'),  # Utiliser une couleur différente pour les minimums, par exemple "r"
+            brush=pg.mkBrush('r'),
+        )
+
+        self.plot_widget.addItem(self.mfcc_min_points)
 
 
     def tier_plot_clicked(self, tier_plot, event):
