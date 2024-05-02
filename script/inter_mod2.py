@@ -217,8 +217,8 @@ class AudioAnalyzer(QMainWindow):
         # self.reset_button.clicked.connect(self.reset_measurements)
         # self.layout.addWidget(self.reset_button, 4, 0)
 
-        layout.addWidget(self.annotation_button)
         layout.addWidget(self.button)
+        layout.addWidget(self.annotation_button)
         layout.addWidget(self.annotation_save_button)
         layout.addWidget(self.analysis_button)  
         layout.addWidget(self.analysismin_button)  
@@ -276,11 +276,9 @@ class AudioAnalyzer(QMainWindow):
         
 ############# ICI se trouve a la fois le moment ou on prend les valeurs de la modulation , et on effecture un peak picking basique je vais rajouter le percentil etc.
     def analyse_maximum(self):
-        print("heo")
         if self.textgrid is None or self.valeurs_mfcc is None or self.temps_mfcc is None:
             return
 
-        print("hei")
         selected_interval = self.get_selected_tier_interval()
         if selected_interval is None:
             return
@@ -501,7 +499,7 @@ class AudioAnalyzer(QMainWindow):
 
         self.region = pg.LinearRegionItem()
         self.plot_widget.addItem(self.region)
-        self.region.sigRegionChanged.connect(self.region_changed)
+        # self.region.sigRegionChanged.connect(self.region_changed)
         self.valeurs_mfcc = valeurs  # Stockez les valeurs MFCC dans la classe
         self.temps_mfcc = temps
 
