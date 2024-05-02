@@ -382,9 +382,6 @@ class AudioAnalyzer(QMainWindow):
             mean_min_value = np.mean(min_values)
             std_min_value = np.std(min_values)
 
-            # Créer le texte avec les informations sur les minimums
-            min_info = f"Mean Min: {mean_min_value:.2f}, Std Min: {std_min_value:.2f}"
-
             # Calculer les temps des minimums
             min_times = interval_time[min_peaks]
 
