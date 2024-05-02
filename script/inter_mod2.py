@@ -32,12 +32,19 @@ from praat_py_ui import (
 
 from scrollable_window import Info, InfoBox, Output
 
+def create_peak_output() -> dict[str, Output]:
+    return {
+            "mean": Output("Mean Time Distance", ""),
+            "std": Output("Std Time Distance", ""),
+    }
+
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
     manual_peak_removal_enabled = False
 
     manual_point_addition_enabled = False  # Variable pour suivre l'état de la fonctionnalité
     moove = False 
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Audio Analyzer")
@@ -63,12 +70,20 @@ class AudioAnalyzer(QMainWindow):
         button_parent = self.button_container()
         self.layout.addWidget(button_parent, 2, 2)
 
-        self.mean_std = Output("Mesures", "")
+        self.max_peak_data_display = create_peak_output()
+        self.min_peak_data_display = create_peak_output()
 
         self.coordinates_widget.add_infobox(
                 InfoBox(
-                    "Calcul MFCC",
-                   dynamic_content=self.mean_std
+                    "Maximum MFCC",
+                    "NaN indique le fait qu'aucun maximum n'a été trouvé.",
+                   dynamic_content=list(self.max_peak_data_display.values())
+                ))
+        self.coordinates_widget.add_infobox(
+                InfoBox(
+                    "Minimum MFCC",
+                    "NaN indique le fait qu'aucun minimum n'a été trouvé.",
+                   dynamic_content=list(self.min_peak_data_display.values())
                 )
         )
 
@@ -328,11 +343,12 @@ class AudioAnalyzer(QMainWindow):
             self.mfcc_points.sigClicked.connect(self.remove_peak_on_click)
 
             # Calculate mean and standard deviation
-            mean_value = np.mean(peak_values_final)
-            std_value = np.std(peak_values_final)
+            mean_value = round(np.mean(peak_values_final), 2)
+            std_value = round(np.std(peak_values_final), 2)
 
             # Update the widget with the mean and standard deviation
-            self.mean_std.update(f"Mean: {mean_value:.2f}, Std: {std_value:.2f}")
+            self.max_peak_data_display["mean"].update(mean_value)
+            self.max_peak_data_display["std"].update(std_value)
 
             self.plot_widget.addItem(self.mfcc_points)
             
@@ -378,23 +394,17 @@ class AudioAnalyzer(QMainWindow):
             min_times_diff = np.diff(min_times)
 
             # Calculer la moyenne et l'écart type des distances en termes de temps
-            mean_time_distance = np.mean(min_times_diff)
-            std_time_distance = np.std(min_times_diff)
+            mean_time_distance = round(np.mean(min_times_diff), 2)
+            std_time_distance = round(np.std(min_times_diff), 2)
 
-            min_info += f"\nMean Time Distance: {mean_time_distance:.2f},\n Std Time Distance: {std_time_distance:.2f}"
+            # Update the widget with the mean and standard deviation
+            self.min_peak_data_display["mean"].update(mean_time_distance)
+            self.min_peak_data_display["std"].update(std_time_distance)
 
         else:
             # Si aucun minimum n'est trouvé, afficher un message indiquant l'absence de données sur les minimums
-            min_info = "No minimums found in the selected interval."
-
-        # Récupérer le texte actuel du widget
-        current_text = self.mean_std.text()
-
-        self.mean_std.update(min_info)
-
-        # Si le widget contient déjà du texte, ajoutez le nouveau texte en dessous
-        if current_text:
-            self.mean_std.update(f"\n{current_text}\n{min_info}")
+            self.min_peak_data_display["mean"].update(float('nan'))
+            self.min_peak_data_display["std"].update(float('nan'))
 
         self.mfcc_min_points = pg.ScatterPlotItem(
             x=min_times,

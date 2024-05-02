@@ -28,18 +28,22 @@ class Output(QLabel):
 class InfoBox(QFrame):
     title: str
     paragraph: str | None
-    dynamic_content: QWidget | None
+    dynamic_content: list[Output] | None
 
     def __init__(
         self,
         title: str,
         paragraph: str | None = None,
-        dynamic_content: QWidget | None = None,
+        dynamic_content: list[Output] | None = None,
     ):
         super().__init__()
 
         self.title = title
         self.paragraph = paragraph
+
+        if dynamic_content is None:
+            dynamic_content = []
+
         self.dynamic_content = dynamic_content
 
         self.init_ui()
@@ -57,9 +61,9 @@ class InfoBox(QFrame):
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
         self.setLineWidth(1)
         self.setStyleSheet("background-color: white")
-        self.setFixedHeight(200)
+        self.setMinimumHeight(100)
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         self.set_style()
         layout = QVBoxLayout()
 
@@ -70,10 +74,16 @@ class InfoBox(QFrame):
             paragraph_label = QLabel(self.paragraph)
             layout.addWidget(paragraph_label)
 
-        if self.dynamic_content is not None:
-            layout.addWidget(self.dynamic_content)
+        self.handle_dynamic_content(layout)
 
         self.setLayout(layout)
+
+    def handle_dynamic_content(self, layout: QVBoxLayout) -> None:
+        if self.dynamic_content is None:
+            return
+
+        for content in self.dynamic_content:
+            layout.addWidget(content)
 
 
 class Info(QWidget):
@@ -82,7 +92,7 @@ class Info(QWidget):
         self.initUI()
 
     def initUI(self):
-        self.setFixedWidth(300)
+        self.setMaximumWidth(400)
 
         layout = QVBoxLayout()
         self.scroll_area = QScrollArea()
