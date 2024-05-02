@@ -32,12 +32,6 @@ from praat_py_ui import (
 
 from scrollable_window import Info, InfoBox, Output
 
-def create_peak_output() -> dict[str, Output]:
-    return {
-            "mean": Output("Mean Time Distance", ""),
-            "std": Output("Std Time Distance", ""),
-    }
-
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
     manual_peak_removal_enabled = False
@@ -70,8 +64,16 @@ class AudioAnalyzer(QMainWindow):
         button_parent = self.button_container()
         self.layout.addWidget(button_parent, 2, 2)
 
-        self.max_peak_data_display = create_peak_output()
-        self.min_peak_data_display = create_peak_output()
+        self.max_peak_data_display = {
+            "mean": Output("Mean value", ""),
+            "std": Output("Standard deviation for value", ""),
+        }
+        self.min_peak_data_display = {
+            "mean": Output("Mean value", ""),
+            "std": Output("Standard deviation for value", ""),
+            "mean_time": Output("Mean Time Distance", "s"),
+            "std_time": Output("Std Time Distance", "s"),
+        }
 
         self.coordinates_widget.add_infobox(
                 InfoBox(
@@ -379,8 +381,12 @@ class AudioAnalyzer(QMainWindow):
         if len(min_peaks) > 1:
             # Extraire les valeurs des minimums
             min_values = interval_values[min_peaks]
-            mean_min_value = np.mean(min_values)
-            std_min_value = np.std(min_values)
+
+            mean_min_value = round(np.mean(min_values), 2)
+            std_min_value = round(np.std(min_values), 2)
+
+            self.min_peak_data_display["mean"].update(mean_min_value)
+            self.min_peak_data_display["std"].update(std_min_value)
 
             # Calculer les temps des minimums
             min_times = interval_time[min_peaks]
@@ -393,13 +399,13 @@ class AudioAnalyzer(QMainWindow):
             std_time_distance = round(np.std(min_times_diff), 2)
 
             # Update the widget with the mean and standard deviation
-            self.min_peak_data_display["mean"].update(mean_time_distance)
-            self.min_peak_data_display["std"].update(std_time_distance)
+            self.min_peak_data_display["mean_time"].update(mean_time_distance)
+            self.min_peak_data_display["std_time"].update(std_time_distance)
 
         else:
             # Si aucun minimum n'est trouvé, afficher un message indiquant l'absence de données sur les minimums
-            self.min_peak_data_display["mean"].update(float('nan'))
-            self.min_peak_data_display["std"].update(float('nan'))
+            for ouput in self.min_peak_data_display.values():
+                output.update(float('nan'))
 
         self.mfcc_min_points = pg.ScatterPlotItem(
             x=min_times,
