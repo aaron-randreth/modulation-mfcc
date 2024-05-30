@@ -39,8 +39,8 @@ def load_channel(
     """
     audio_data, _ = librosa.load(file_path, sr=signal_sample_rate, mono=False)
 
-    if audio_data.ndim > 1:
-        return audio_data[channel_nb, :]
+    # if audio_data.ndim > 1:
+        # return audio_data[channel_nb, :]
 
     return audio_data
 

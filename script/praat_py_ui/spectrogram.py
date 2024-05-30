@@ -53,19 +53,19 @@ class Spectrogram(pg.ImageItem):
             Uses 'row-major' by default unlike pyqtgraph.
         """
 
-        if frequency_samples.shape[0] != spect_data.shape[0]:
-            raise ValueError(
-                    f"The dimensions of frequency_samples {frequency_samples.shape} "+
-                    f" and spect_data {spect_data.shape} are not compatible. " + 
-                    f"{frequency_samples.shape[0]} != {spect_data.shape[0]}"
-            )
-
-        if time_segments.shape[0] != spect_data.shape[1]:
-            raise ValueError(
-                    f"The dimensions of time_segments {time_segments.shape} "+
-                    f"and spect_data {spect_data.shape} are not compatible. " +
-                    f"{time_segments.shape[0]} != {spect_data.shape[1]}"
-            )
+        # if frequency_samples.shape[0] != spect_data.shape[0]:
+        #     raise ValueError(
+        #             f"The dimensions of frequency_samples {frequency_samples.shape} "+
+        #             f" and spect_data {spect_data.shape} are not compatible. " + 
+        #             f"{frequency_samples.shape[0]} != {spect_data.shape[0]}"
+        #     )
+        #
+        # if time_segments.shape[0] != spect_data.shape[1]:
+        #     raise ValueError(
+        #             f"The dimensions of time_segments {time_segments.shape} "+
+        #             f"and spect_data {spect_data.shape} are not compatible. " +
+        #             f"{time_segments.shape[0]} != {spect_data.shape[1]}"
+            # )
 
         if zoom_blur:
             spect_data = scipy.ndimage.zoom(spect_data, 6, order=4)
