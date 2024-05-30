@@ -332,6 +332,7 @@ class AudioAnalyzer(QMainWindow):
         if len(peak_times_final) > 0 and len(peak_values_final) > 0:
 
             self.mfcc_points = pg.ScatterPlotItem(
+                    name="max",
                     x=peak_times_final,
                     y=peak_values_final,
                     symbol="x",
@@ -408,6 +409,7 @@ class AudioAnalyzer(QMainWindow):
                 output.update(float('nan'))
 
         self.mfcc_min_points = pg.ScatterPlotItem(
+            name="min",
             x=min_times,
             y=min_values,
             symbol="o",  # Utiliser un symbole différent pour les minimums, par exemple "o"
@@ -496,7 +498,7 @@ class AudioAnalyzer(QMainWindow):
         fs = 200
         temps = np.arange(0, len(valeurs)) / fs
         self.ax.clear()
-        self.ax.plot(temps, valeurs, pen="#FF5733")
+        self.ax.plot(temps, valeurs, pen="#FF5733", name="modulation_mfcc")
         self.ax.setTitle("Modulation MFCC")
         self.ax.showGrid(x=True, y=True)
 
