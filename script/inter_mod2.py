@@ -1,7 +1,7 @@
 import sys
 from scipy.signal import argrelextrema
 from math import sqrt
-
+from PyQt5.QtWidgets import QStackedWidget
 from scipy import signal
 from librosa import feature as lf
 from scipy.signal import find_peaks
@@ -323,6 +323,8 @@ class MinMaxAnalyser(QWidget):
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
+    spectrogram_stacked_widget: QStackedWidget
+    spectrogram_loaded: bool = False
 
     def __init__(self):
         super().__init__()
@@ -332,12 +334,11 @@ class AudioAnalyzer(QMainWindow):
         main_widget = QWidget(self)
         layout = QHBoxLayout()
 
-        # self.audio_file_label = QLabel("Aucun fichier audio chargé")
-        # layout.addWidget(self.audio_file_label, 0, 0, 1, 3)
-
+        self.spectrogram_stacked_widget = QStackedWidget()
         curve_area, self.curve_layout = self.curves_container()
+        self.spectrogram_stacked_widget.addWidget(curve_area)
 
-        layout.addWidget(curve_area)
+        layout.addWidget(self.spectrogram_stacked_widget)
         layout.addWidget(self.button_container())
 
         main_widget.setLayout(layout)
@@ -363,20 +364,24 @@ class AudioAnalyzer(QMainWindow):
         self.eva_button = QPushButton("Load EVA File")
         self.annotation_button = QPushButton("Load Textgrid Annotation")
         self.annotation_save_button = QPushButton("Save TextGrid Annotation")
+        self.toggle_spectrogram_button = QPushButton("Toggle Spectrogram")
 
         layout.addWidget(self.button)
         layout.addWidget(self.eva_button)
         layout.addWidget(self.annotation_button)
         layout.addWidget(self.annotation_save_button)
+        layout.addWidget(self.toggle_spectrogram_button)
 
         self.button.clicked.connect(self.load_audio)
         self.eva_button.clicked.connect(self.load_eva)
         self.annotation_button.clicked.connect(self.load_annotations)
         self.annotation_save_button.clicked.connect(self.save_annotations)
+        self.toggle_spectrogram_button.clicked.connect(self.toggle_spectrogram)
 
         button_parent.setLayout(layout)
 
         return button_parent
+
 
     def load_audio(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -385,21 +390,20 @@ class AudioAnalyzer(QMainWindow):
         if not file_path:
             return
 
-        # self.audio_file_label.setText(f"Fichier audio chargé : {file_path}")
-
         sound_data = calc.Parselmouth(file_path)
         snd = sound_data.get_sound()
-        spc = sound_data.get_spectrogram()
+        self.spc = sound_data.get_spectrogram()
 
-        self.curve_layout.addWidget(
-            create_plot_widget(snd.timestamps, snd.amplitudes[0])
-        )
+        # Ajouter le tracé audio au QStackedWidget
+        self.curve_layout.addWidget(create_plot_widget(snd.timestamps, snd.amplitudes[0]))
 
-        self.curve_layout.addWidget(
-            specto.create_spectrogram_plot(
-                spc.frequencies, spc.timestamps, spc.data_matrix
+        # Charger initialement le spectrogramme si l'état est activé
+        if self.spectrogram_loaded:
+            spectrogram_widget = specto.create_spectrogram_plot(
+                self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
             )
-        )
+            self.spectrogram_stacked_widget.addWidget(spectrogram_widget)
+            self.spectrogram_stacked_widget.setCurrentWidget(spectrogram_widget)
 
         audio_data = load_channel(file_path)
         x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
@@ -408,7 +412,23 @@ class AudioAnalyzer(QMainWindow):
         )
         self.a = a
         self.curve_layout.addWidget(a)
+    def toggle_spectrogram(self):
+        if self.spectrogram_loaded:
+            # Si le spectrogramme est déjà chargé, le masquer
+            self.spectrogram_widget.setParent(None)
+            self.spectrogram_widget = None
+            self.spectrogram_loaded = False
+            self.toggle_spectrogram_button.setText("Toggle Spectrogram")
+        else:
+            if hasattr(self, 'spc') and self.spc:
+                self.spectrogram_widget = specto.create_spectrogram_plot(
+                    self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
+                )
+                # Supposons que self.curve_layout est un QVBoxLayout
+                self.curve_layout.insertWidget(1, self.spectrogram_widget)
 
+                self.spectrogram_loaded = True
+                self.toggle_spectrogram_button.setText("Hide Spectrogram")
     def load_eva(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Audio File", "", "Audio Files (*.wav)"
