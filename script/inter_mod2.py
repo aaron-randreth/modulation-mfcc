@@ -1,11 +1,13 @@
 import sys
 from scipy.signal import argrelextrema
 from math import sqrt
+from PyQt5.QtWidgets import QMenuBar
 from PyQt5.QtWidgets import QStackedWidget
 from scipy import signal
 from librosa import feature as lf
 from scipy.signal import find_peaks
 import numpy as np
+from PyQt5.QtWidgets import QMenu
 from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtWidgets import (
     QApplication,
@@ -330,7 +332,7 @@ class AudioAnalyzer(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Audio Analyzer")
-
+        self._createMenuBar()
         main_widget = QWidget(self)
         layout = QHBoxLayout()
 
@@ -343,6 +345,44 @@ class AudioAnalyzer(QMainWindow):
 
         main_widget.setLayout(layout)
         self.setCentralWidget(main_widget)
+    def _createMenuBar(self):
+        menuBar = QMenuBar(self)
+        self.setMenuBar(menuBar)
+        
+        # Menu "File"
+        fileMenu = QMenu("&File", self)
+        menuBar.addMenu(fileMenu)
+        
+        # Actions
+        loadAudioAction = QAction("Load Audio File", self)
+        loadAudioAction.triggered.connect(self.load_audio)
+        fileMenu.addAction(loadAudioAction)
+        
+        loadEVAAction = QAction("Load EVA File", self)
+        loadEVAAction.triggered.connect(self.load_eva)
+        fileMenu.addAction(loadEVAAction)
+        
+        loadAnnotationAction = QAction("Load Textgrid Annotation", self)
+        loadAnnotationAction.triggered.connect(self.load_annotations)
+        fileMenu.addAction(loadAnnotationAction)
+        
+        saveAnnotationAction = QAction("Save TextGrid Annotation", self)
+        saveAnnotationAction.triggered.connect(self.save_annotations)
+        fileMenu.addAction(saveAnnotationAction)
+
+        # Menu "Affichage"
+        editMenu = menuBar.addMenu("&Affichage")
+        
+        # Action Toggle Spectrogram
+        self.toggle_spectrogram_action = QAction("Toggle Spectrogram", self)
+        self.toggle_spectrogram_action.setChecked(False)
+        self.toggle_spectrogram_action.setCheckable(True)
+
+        self.toggle_spectrogram_action.triggered.connect(self.toggle_spectrogram)
+        editMenu.addAction(self.toggle_spectrogram_action)
+        
+        # Menu "Help"
+        helpMenu = menuBar.addMenu("&Help")
 
     def curves_container(self) -> QWidget:
         curve_parent = QWidget()
@@ -360,23 +400,6 @@ class AudioAnalyzer(QMainWindow):
         button_parent = QWidget()
         layout = QVBoxLayout()
 
-        self.button = QPushButton("Load Audio File")
-        self.eva_button = QPushButton("Load EVA File")
-        self.annotation_button = QPushButton("Load Textgrid Annotation")
-        self.annotation_save_button = QPushButton("Save TextGrid Annotation")
-        self.toggle_spectrogram_button = QPushButton("Toggle Spectrogram")
-
-        layout.addWidget(self.button)
-        layout.addWidget(self.eva_button)
-        layout.addWidget(self.annotation_button)
-        layout.addWidget(self.annotation_save_button)
-        layout.addWidget(self.toggle_spectrogram_button)
-
-        self.button.clicked.connect(self.load_audio)
-        self.eva_button.clicked.connect(self.load_eva)
-        self.annotation_button.clicked.connect(self.load_annotations)
-        self.annotation_save_button.clicked.connect(self.save_annotations)
-        self.toggle_spectrogram_button.clicked.connect(self.toggle_spectrogram)
 
         button_parent.setLayout(layout)
 
@@ -418,17 +441,14 @@ class AudioAnalyzer(QMainWindow):
             self.spectrogram_widget.setParent(None)
             self.spectrogram_widget = None
             self.spectrogram_loaded = False
-            self.toggle_spectrogram_button.setText("Toggle Spectrogram")
         else:
             if hasattr(self, 'spc') and self.spc:
                 self.spectrogram_widget = specto.create_spectrogram_plot(
                     self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
                 )
-                # Supposons que self.curve_layout est un QVBoxLayout
                 self.curve_layout.insertWidget(1, self.spectrogram_widget)
 
                 self.spectrogram_loaded = True
-                self.toggle_spectrogram_button.setText("Hide Spectrogram")
     def load_eva(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Audio File", "", "Audio Files (*.wav)"
