@@ -41,18 +41,73 @@ from datasources.mfcc import load_channel, get_MFCCS_change
 
 from scrollable_window import Info, InfoBox, Output
 
-
 def create_plot_widget(x, y):
     plot = pg.PlotWidget()
     plot.plot(x=x, y=y)
-
-    # plot.setLimits(xMin=xlim[0], xMax=xlim[1], yMin=ylim[0], yMax=ylim[1])
-    plot.setMouseEnabled(x=True, y=False)
-    # plot.setLabel("bottom", "Temps", units="s")
-    # plot.getAxis("left").setWidth(60)
-
     return plot
 
+class Crosshair:
+
+    def __init__(self, central_plots) -> None:
+        self.central_plots = []
+        self.display_plots = []
+        self.crosshair_lines = []
+
+        for plot in central_plots:
+            self.add_central_plot(plot)
+
+        self.link_plots()
+
+    @property
+    def plots(self):
+        return [*self.central_plots, *self.display_plots]
+
+    def link_plots(self):
+        for p in self.plots:
+            p.setXLink(self.central_plots[0])
+
+    def add_central_plot(self, central_plot) -> None:
+        line = pg.InfiniteLine(
+            angle=90,
+            movable=False,
+            pen=pg.mkPen(style=Qt.DashLine, color="r")
+        )
+
+        self.crosshair_lines.append(line)
+        self.central_plots.append(central_plot)
+
+        central_plot.addItem(line, ignoreBounds=True)
+        central_plot.scene().sigMouseMoved.connect(self.move_crosshair)
+
+        self.link_plots()
+
+    def add_display_plot(self, display_plot) -> None:
+        line = pg.InfiniteLine(
+            angle=90,
+            movable=False,
+            pen=pg.mkPen(style=Qt.DashLine, color="b")
+        )
+
+        self.crosshair_lines.append(line)
+        self.display_plots.append(display_plot)
+
+        display_plot.addItem(line, ignoreBounds=True)
+
+        self.link_plots()
+
+    def move_crosshair(self, event):
+        mousePoint = None
+        pos = event
+
+        for p in self.central_plots:
+            if p.sceneBoundingRect().contains(pos):
+                mousePoint = p.getPlotItem().vb.mapSceneToView(pos)
+
+        if mousePoint is None:
+            return
+
+        for l in self.crosshair_lines:
+            l.setPos(mousePoint.x())
 
 class MinMaxFinder:
 
@@ -418,8 +473,10 @@ class AudioAnalyzer(QMainWindow):
         self.spc = sound_data.get_spectrogram()
 
         # Ajouter le tracé audio au QStackedWidget
-        self.curve_layout.addWidget(create_plot_widget(snd.timestamps, snd.amplitudes[0]))
+        sound_widget = create_plot_widget(snd.timestamps, snd.amplitudes[0])
+        self.curve_layout.addWidget(sound_widget)
 
+        spectrogram_widget = None
         # Charger initialement le spectrogramme si l'état est activé
         if self.spectrogram_loaded:
             spectrogram_widget = specto.create_spectrogram_plot(
@@ -430,11 +487,20 @@ class AudioAnalyzer(QMainWindow):
 
         audio_data = load_channel(file_path)
         x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
+
         a = MinMaxAnalyser(
             "Mfcc", x_mfccs, y_mfccs, MinMaxFinder(), self.get_selected_tier_interval
         )
+
+        self.crosshair = Crosshair([sound_widget])
+
+        if spectrogram_widget is not None:
+            self.crosshair.add_central_plot(self.spectrogram_widget)
+
         self.a = a
+        self.crosshair.add_display_plot(a.plot_widget)
         self.curve_layout.addWidget(a)
+
     def toggle_spectrogram(self):
         if self.spectrogram_loaded:
             # Si le spectrogramme est déjà chargé, le masquer
@@ -449,6 +515,8 @@ class AudioAnalyzer(QMainWindow):
                 self.curve_layout.insertWidget(1, self.spectrogram_widget)
 
                 self.spectrogram_loaded = True
+                self.crosshair.add_central_plot(self.spectrogram_widget)
+
     def load_eva(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Audio File", "", "Audio Files (*.wav)"
@@ -461,15 +529,16 @@ class AudioAnalyzer(QMainWindow):
         times = np.arange(len(audio_data[0, :])) / 200
 
         for i, channel in enumerate(audio_data):
-            self.curve_layout.addWidget(
-                MinMaxAnalyser(
+            a = MinMaxAnalyser(
                     f"EVA-{1}",
                     times,
                     channel,
                     MinMaxFinder(),
                     self.get_selected_tier_interval,
-                )
             )
+
+            self.curve_layout.addWidget(a)
+            self.crosshair.add_display_plot(a.plot_widget)
 
     def get_selected_tier_interval(self) -> None:
         if self.textgrid is None:
@@ -521,6 +590,9 @@ class AudioAnalyzer(QMainWindow):
         self.textgrid = ui_tgt.TextgridTGTConvert().from_textgrid(
             tgt_textgrid, self.a.plot_widget
         )
+
+        for tier in self.textgrid.get_tiers():
+            self.crosshair.add_display_plot(tier)
 
         self.curve_layout.addWidget(self.textgrid)
 
