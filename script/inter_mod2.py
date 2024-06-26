@@ -4,7 +4,7 @@ from math import sqrt
 import scipy
 import numpy as np
 from librosa import feature as lf
-
+from PyQt5.QtWidgets import QCheckBox
 from PyQt5.QtWidgets import (
     QMenu,
     QStackedWidget,
@@ -269,7 +269,13 @@ class MinMaxAnalyser(QWidget):
         self.y = y
         self.extremum = extremum
         self.get_interval = get_interval
-
+        # Your existing initialization code
+        self.plot_widget = None  # Assume this is initialized elsewhere in your code
+        
+        # Checkbox for controlling the visibility of the plot
+        self.visibility_checkbox = QCheckBox(f"Toggle visibility for {name}")
+        self.visibility_checkbox.setChecked(True)  # Start with the plot visible
+        self.visibility_checkbox.stateChanged.connect(self.toggle_visibility)
         self.__init_ui()
 
     def __init_ui(self) -> None:
@@ -293,6 +299,10 @@ class MinMaxAnalyser(QWidget):
 
         self.setLayout(layout)
 
+
+    def toggle_visibility(self, state):
+        # Toggle the visibility based on checkbox state
+        self.plot_widget.setVisible(state == Qt.Checked)
     def config_toolbar(self, toolbar: QToolBar) -> None:
 
         self.do_maximum_analysis = QAction("Analyse max", self)
@@ -556,10 +566,12 @@ class AudioAnalyzer(QMainWindow):
 
     def toggle_spectrogram(self):
         if self.spectrogram_loaded:
-            # Si le spectrogramme est déjà chargé, le masquer
             self.spectrogram_widget.setParent(None)
             self.spectrogram_widget = None
             self.spectrogram_loaded = False
+            for analyzer in self.formant_analyzers:
+                analyzer.setParent(None)
+                self.curve_layout.removeWidget(analyzer)
             return
 
         if not hasattr(self, 'spc') or not self.spc:
@@ -569,7 +581,6 @@ class AudioAnalyzer(QMainWindow):
             self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
         )
         self.curve_layout.insertWidget(1, self.spectrogram_widget)
-
         self.spectrogram_loaded = True
         self.crosshair.add_central_plot(self.spectrogram_widget)
 
@@ -580,14 +591,19 @@ class AudioAnalyzer(QMainWindow):
         start = float(selected_tier_interval.start_time)
         end = float(selected_tier_interval.end_time)
 
-        f1_times, f1_values = calc_formant(parselmouth.Sound(self.file_path), start, end, 1)
-        self.spectrogram_widget.plot(f1_times, f1_values)
-
-        f2_times, f2_values = calc_formant(parselmouth.Sound(self.file_path), start, end, 2)
-        self.spectrogram_widget.plot(f2_times, f2_values)
-
-        f3_times, f3_values = calc_formant(parselmouth.Sound(self.file_path), start, end, 3)
-        self.spectrogram_widget.plot(f3_times, f3_values)
+        if not hasattr(self, 'formant_analyzers'):
+            self.formant_analyzers = []
+        for formant_number in [1, 2, 3]:
+            f_times, f_values = calc_formant(parselmouth.Sound(self.file_path), start, end, formant_number)
+            self.spectrogram_widget.plot(f_times, f_values, pen=['r', 'b', 'g'][formant_number-1])
+            analyzer = MinMaxAnalyser(
+                f"Formant {formant_number}", f_times, f_values, MinMaxFinder(), lambda:selected_tier_interval
+            )
+            
+            self.formant_analyzers.append(analyzer)
+            self.curve_layout.addWidget(analyzer.visibility_checkbox)  
+            self.curve_layout.addWidget(analyzer)  
+            self.crosshair.add_display_plot(analyzer.plot_widget)
 
     def load_eva(self):
         file_path, _ = QFileDialog.getOpenFileName(
