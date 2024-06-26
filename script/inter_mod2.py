@@ -21,9 +21,14 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QLabel,
     QScrollArea,
+    QListWidget,
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox
 )
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QWindow
 
 import pyqtgraph as pg
 import parselmouth
@@ -61,6 +66,33 @@ def create_plot_widget(x, y):
     plot = pg.PlotWidget()
     plot.plot(x=x, y=y)
     return plot
+
+class SelectableListDialog(QDialog):
+
+    def __init__(self, num_items: int, format_string: str):
+        super().__init__()
+
+        self.setWindowTitle('Selectable List')
+
+        self.item_labels = [format_string.format(i) for i in range(num_items)]
+
+        self.list_widget = QListWidget()
+        self.list_widget.setSelectionMode(QAbstractItemView.MultiSelection)
+
+        self.list_widget.addItems(self.item_labels)
+
+        self.dialog_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.dialog_buttons.accepted.connect(self.accept)
+        self.dialog_buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.list_widget)
+        layout.addWidget(self.dialog_buttons)
+        self.setLayout(layout)
+
+    def get_selected_indices(self) -> list[int]:
+        selected_texts = [item.text() for item in self.list_widget.selectedItems()]
+        return [self.item_labels.index(text) for text in selected_texts]
 
 class Crosshair:
 
@@ -565,10 +597,18 @@ class AudioAnalyzer(QMainWindow):
             return
 
         audio_data = load_channel(file_path)
-        print(audio_data.ndim)
         times = np.arange(len(audio_data[0, :])) / 200
 
-        for i, channel in enumerate(audio_data):
+        channel_nb = len(audio_data)
+
+        selection = SelectableListDialog(channel_nb, "Channel {}")
+
+        if selection.exec_() != QDialog.Accepted:
+            return
+
+        for i in selection.get_selected_indices():
+            channel = audio_data[i]
+
             a = MinMaxAnalyser(
                     f"EVA-{1}",
                     times,
