@@ -38,6 +38,25 @@ from praat_py_ui import (
 from datasources.mfcc import load_channel, get_MFCCS_change
 from scrollable_window import Info, InfoBox, Output
 
+pg.setConfigOptions(foreground="black", background="w")
+
+def calc_formant(sound: parselmouth.Sound, start_time: float, end_time: float, formant_number: int) -> tuple[list[float], list[float]]:
+    formants = sound.to_formant_burg()
+
+    time_values = formants.ts()
+    formant1_dict = {time:
+                     formants.get_value_at_time(formant_number=formant_number, time=time) for time in time_values}
+
+    preserved_formant1_dict = {time: formant1_dict[time] for time in time_values if start_time <= time <= end_time}
+
+    interp_func1 = scipy.interpolate.interp1d(list(preserved_formant1_dict.keys()), list(preserved_formant1_dict.values()), kind='linear')
+    time_values_interp1 = np.linspace(min(preserved_formant1_dict.keys()), max(preserved_formant1_dict.keys()), num=1000)
+    interpolated_formants = interp_func1(time_values_interp1)
+
+    smoothed_curve1 = scipy.signal.savgol_filter(interpolated_formants, window_length=101, polyorder=1)
+
+    return time_values_interp1, smoothed_curve1
+
 def create_plot_widget(x, y):
     plot = pg.PlotWidget()
     plot.plot(x=x, y=y)
@@ -388,9 +407,11 @@ class AudioAnalyzer(QMainWindow):
         main_widget = QWidget(self)
         layout = QHBoxLayout()
 
+        self.spectrogram_widget = None
         self.spectrogram_stacked_widget = QStackedWidget()
         curve_area, self.curve_layout = self.curves_container()
         self.spectrogram_stacked_widget.addWidget(curve_area)
+        self.file_path = ""
 
         layout.addWidget(self.spectrogram_stacked_widget)
         layout.addWidget(self.button_container())
@@ -462,9 +483,11 @@ class AudioAnalyzer(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Audio File", "", "Audio Files (*.wav)"
         )
+
         if not file_path:
             return
 
+        self.file_path = file_path
         sound_data = calc.Parselmouth(file_path)
         snd = sound_data.get_sound()
         self.spc = sound_data.get_spectrogram()
@@ -476,11 +499,12 @@ class AudioAnalyzer(QMainWindow):
         spectrogram_widget = None
         # Charger initialement le spectrogramme si l'état est activé
         if self.spectrogram_loaded:
-            spectrogram_widget = specto.create_spectrogram_plot(
+            self.spectrogram_widget = specto.create_spectrogram_plot(
                 self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
             )
-            self.spectrogram_stacked_widget.addWidget(spectrogram_widget)
-            self.spectrogram_stacked_widget.setCurrentWidget(spectrogram_widget)
+            self.spectrogram_stacked_widget.addWidget(self.spectrogram_widget)
+            self.spectrogram_stacked_widget.setCurrentWidget(self.spectrogram_widget)
+
 
         audio_data = load_channel(file_path)
         x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
@@ -491,7 +515,7 @@ class AudioAnalyzer(QMainWindow):
 
         self.crosshair = Crosshair([sound_widget])
 
-        if spectrogram_widget is not None:
+        if self.spectrogram_widget is not None:
             self.crosshair.add_central_plot(self.spectrogram_widget)
 
         self.a = a
@@ -504,15 +528,34 @@ class AudioAnalyzer(QMainWindow):
             self.spectrogram_widget.setParent(None)
             self.spectrogram_widget = None
             self.spectrogram_loaded = False
-        else:
-            if hasattr(self, 'spc') and self.spc:
-                self.spectrogram_widget = specto.create_spectrogram_plot(
-                    self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
-                )
-                self.curve_layout.insertWidget(1, self.spectrogram_widget)
+            return
 
-                self.spectrogram_loaded = True
-                self.crosshair.add_central_plot(self.spectrogram_widget)
+        if not hasattr(self, 'spc') or not self.spc:
+            return
+
+        self.spectrogram_widget = specto.create_spectrogram_plot(
+            self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
+        )
+        self.curve_layout.insertWidget(1, self.spectrogram_widget)
+
+        self.spectrogram_loaded = True
+        self.crosshair.add_central_plot(self.spectrogram_widget)
+
+        selected_tier_interval = self.get_selected_tier_interval()
+        if selected_tier_interval is None:
+            return
+
+        start = float(selected_tier_interval.start_time)
+        end = float(selected_tier_interval.end_time)
+
+        f1_times, f1_values = calc_formant(parselmouth.Sound(self.file_path), start, end, 1)
+        self.spectrogram_widget.plot(f1_times, f1_values)
+
+        f2_times, f2_values = calc_formant(parselmouth.Sound(self.file_path), start, end, 2)
+        self.spectrogram_widget.plot(f2_times, f2_values)
+
+        f3_times, f3_values = calc_formant(parselmouth.Sound(self.file_path), start, end, 3)
+        self.spectrogram_widget.plot(f3_times, f3_values)
 
     def load_eva(self):
         file_path, _ = QFileDialog.getOpenFileName(
