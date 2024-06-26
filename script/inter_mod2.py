@@ -23,23 +23,19 @@ from PyQt5.QtWidgets import (
     QScrollArea,
 )
 
-import pyqtgraph as pg
-
-import parselmouth
-
-pg.setConfigOptions(foreground="black", background="w")
-
-import tgt
 from PyQt5.QtCore import Qt
+
+import pyqtgraph as pg
+import parselmouth
+import tgt
+
 from praat_py_ui import (
     tiers as ui_tiers,
     textgridtools as ui_tgt,
     spectrogram as specto,
     parselmouth_calc as calc,
 )
-
 from datasources.mfcc import load_channel, get_MFCCS_change
-
 from scrollable_window import Info, InfoBox, Output
 
 def create_plot_widget(x, y):
