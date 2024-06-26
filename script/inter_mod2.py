@@ -1,15 +1,16 @@
 import sys
-from scipy.signal import argrelextrema
 from math import sqrt
-from PyQt5.QtWidgets import QMenuBar
-from PyQt5.QtWidgets import QStackedWidget
-from scipy import signal
-from librosa import feature as lf
-from scipy.signal import find_peaks
+
+import scipy
 import numpy as np
-from PyQt5.QtWidgets import QMenu
-from PyQt5.QtWidgets import QToolBar, QAction
+from librosa import feature as lf
+
 from PyQt5.QtWidgets import (
+    QMenu,
+    QStackedWidget,
+    QMenuBar,
+    QToolBar,
+    QAction,
     QApplication,
     QMainWindow,
     QPushButton,
@@ -135,7 +136,7 @@ class MinMaxFinder:
             interval_times, interval_values = x, y
 
         # Trouver les minimums dans l'intervalle
-        min_peaks, _ = find_peaks(
+        min_peaks, _ = scipy.signal.find_peaks(
             -interval_values
         )  # Utiliser -interval_values pour trouver les minimums
 
@@ -155,9 +156,9 @@ class MinMaxFinder:
         else:
             interval_times, interval_values = x, y
 
-        min_peaks, _ = find_peaks(-interval_values)
+        min_peaks, _ = scipy.signal.find_peaks(-interval_values)
 
-        initial_peaks, _ = find_peaks(interval_values)
+        initial_peaks, _ = scipy.signal.find_peaks(interval_values)
 
         if len(initial_peaks) == 1:
             peaks = initial_peaks
@@ -180,7 +181,7 @@ class MinMaxFinder:
             1,
         )
 
-        peaks, _ = find_peaks(
+        peaks, _ = scipy.signal.find_peaks(
             interval_values, distance=min_distance_samples, prominence=1
         )
         peak_times_final = interval_times[peaks]
