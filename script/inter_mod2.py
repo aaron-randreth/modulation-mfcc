@@ -44,13 +44,11 @@ from datasources.mfcc import load_channel, get_MFCCS_change
 from scrollable_window import Info, InfoBox, Output
 
 pg.setConfigOptions(foreground="black", background="w")
-
 def calc_formant(sound: parselmouth.Sound, start_time: float, end_time: float, formant_number: int) -> tuple[list[float], list[float]]:
     formants = sound.to_formant_burg()
 
     time_values = formants.ts()
-    formant1_dict = {time:
-                     formants.get_value_at_time(formant_number=formant_number, time=time) for time in time_values}
+    formant1_dict = {time: formants.get_value_at_time(formant_number=formant_number, time=time) for time in time_values}
 
     preserved_formant1_dict = {time: formant1_dict[time] for time in time_values if start_time <= time <= end_time}
 
@@ -60,8 +58,11 @@ def calc_formant(sound: parselmouth.Sound, start_time: float, end_time: float, f
 
     smoothed_curve1 = scipy.signal.savgol_filter(interpolated_formants, window_length=101, polyorder=1)
 
-    return time_values_interp1, smoothed_curve1
-
+    # Ré-échantillonner la courbe lissée à 200 Hz
+    new_time_values = np.arange(start_time, end_time, 1/200.0)
+    interp_func2 = scipy.interpolate.interp1d(time_values_interp1, smoothed_curve1, kind='linear', fill_value="extrapolate")
+    resampled_formants = interp_func2(new_time_values)
+    return new_time_values, resampled_formants
 def create_plot_widget(x, y):
     plot = pg.PlotWidget()
     plot.plot(x=x, y=y)
@@ -158,97 +159,54 @@ class Crosshair:
             l.setPos(mousePoint.x())
 
 class MinMaxFinder:
-
-    def find_subsection(self, x, y, selected_interval):
-        start_time = float(selected_interval.start_time)
-        end_time = float(selected_interval.end_time)
-        fs = 200
-        start_index = int(start_time * fs)
-        end_index = int(end_time * fs)
-
+    def analyse_minimum(self, x, y, interval):
+        if interval is None:
+            print("No interval specified.")
+            return [], []
+        start, end = interval
+        fs = 200  # fréquence d'échantillonnage pour l'indexation
+        start_index = int(start * fs)
+        end_index = int(end * fs)
+        
         start_index = max(start_index, 0)
         end_index = min(end_index, len(y))
-
+        
         interval_times = x[start_index:end_index]
         interval_values = y[start_index:end_index]
-
-        return interval_times, interval_values
-
-    def analyse_minimum(self, x, y, selected_interval):
-        if selected_interval is not None:
-            interval_times, interval_values = self.find_subsection(
-                x, y, selected_interval
-            )
-        else:
-            interval_times, interval_values = x, y
-
-        # Trouver les minimums dans l'intervalle
-        min_peaks, _ = scipy.signal.find_peaks(
-            -interval_values
-        )  # Utiliser -interval_values pour trouver les minimums
-
-        if len(min_peaks) <= 1:  # TODO verif if 1 is correct
+        
+        min_peaks, _ = scipy.signal.find_peaks(-interval_values)
+        if len(min_peaks) == 0:
             return [], []
-
+        
         min_times = interval_times[min_peaks]
         min_values = interval_values[min_peaks]
-
+        
         return min_times, min_values
 
-    def analyse_maximum(self, x, y, selected_interval):
-        if selected_interval is not None:
-            interval_times, interval_values = self.find_subsection(
-                x, y, selected_interval
-            )
-        else:
-            interval_times, interval_values = x, y
+    def analyse_maximum(self, x, y, interval):
+        if interval is None:
+            print("No interval specified.")
+            return [], []
+        start, end = interval
+        fs = 200  # fréquence d'échantillonnage pour l'indexation
+        start_index = int(start * fs)
+        end_index = int(end * fs)
+        
+        start_index = max(start_index, 0)
+        end_index = min(end_index, len(y))
+        
+        interval_times = x[start_index:end_index]
+        interval_values = y[start_index:end_index]
+        
+        max_peaks, _ = scipy.signal.find_peaks(interval_values)
+        if len(max_peaks) == 0:
+            return [], []
+        
+        max_times = interval_times[max_peaks]
+        max_values = interval_values[max_peaks]
+        
+        return max_times, max_values
 
-        min_peaks, _ = scipy.signal.find_peaks(-interval_values)
-
-        initial_peaks, _ = scipy.signal.find_peaks(interval_values)
-
-        if len(initial_peaks) == 1:
-            peaks = initial_peaks
-            peak_times_final = interval_times[peaks] if len(peaks) > 0 else []
-            peak_values_final = interval_values[peaks] if len(peaks) > 0 else []
-            return peak_times_final, peak_values_final
-
-        peak_times = interval_times[initial_peaks]
-        time_gaps = np.diff(peak_times)
-
-        q75, q25 = np.percentile(time_gaps, [100, 10])
-        iqr = q75 - q25
-        min_distance_time = iqr - 0.03
-        min_distance_samples = max(
-            int(
-                min_distance_time
-                * len(interval_values)
-                / (interval_times[-1] - interval_times[0])
-            ),
-            1,
-        )
-
-        peaks, _ = scipy.signal.find_peaks(
-            interval_values, distance=min_distance_samples, prominence=1
-        )
-        peak_times_final = interval_times[peaks]
-        peak_values_final = interval_values[peaks]
-
-        # Vérifier si le dernier maximum dépasse le dernier minimum
-        if len(min_peaks) == 0 or len(peak_values_final) == 0:
-            return peak_times_final, peak_values_final
-
-        last_max_index = peaks[-1]
-        last_min_index = min_peaks[-1]
-
-        if last_min_index <= last_min_index:
-            return peak_times_final, peak_values_final
-
-        # Le dernier maximum dépasse le dernier minimum.
-        peak_times_final = np.delete(peak_times_final, -1)
-        peak_values_final = np.delete(peak_values_final, -1)
-
-        return peak_times_final, peak_values_final
 
 
 class MinMaxAnalyser(QWidget):
@@ -261,23 +219,28 @@ class MinMaxAnalyser(QWidget):
     max_points: pg.ScatterPlotItem
     min_points: pg.ScatterPlotItem
 
-    def __init__(self, name: str, x, y, extremum: MinMaxFinder, get_interval) -> None:
+    def __init__(self, name: str, x, y, extremum: MinMaxFinder, get_interval_func) -> None:
         super().__init__()
-
         self.name = name
         self.x = x
         self.y = y
         self.extremum = extremum
-        self.get_interval = get_interval
-        # Your existing initialization code
-        self.plot_widget = None  # Assume this is initialized elsewhere in your code
+        self.get_interval = get_interval_func  
+
+        self.plot_widget = None  
         
-        # Checkbox for controlling the visibility of the plot
         self.visibility_checkbox = QCheckBox(f"Toggle visibility for {name}")
-        self.visibility_checkbox.setChecked(True)  # Start with the plot visible
+        self.visibility_checkbox.setChecked(True) 
         self.visibility_checkbox.stateChanged.connect(self.toggle_visibility)
         self.__init_ui()
 
+        self.max_points = pg.ScatterPlotItem(pen=pg.mkPen("g"), brush=pg.mkBrush("b"))
+        self.min_points = pg.ScatterPlotItem(pen=pg.mkPen("r"), brush=pg.mkBrush("r"))
+
+        self.plot_widget.addItem(self.max_points)
+        self.plot_widget.addItem(self.min_points)
+        self.max_points.hide()
+        self.min_points.hide()
     def __init_ui(self) -> None:
         layout = QVBoxLayout()
 
@@ -298,10 +261,29 @@ class MinMaxAnalyser(QWidget):
         layout.addWidget(self.plot_widget)
 
         self.setLayout(layout)
+    def toggle_formant(self, formant_number):
+        if not hasattr(self, 'formant_analyzers') or len(self.formant_analyzers) < formant_number:
+            return
 
+        analyzer = self.formant_analyzers[formant_number - 1]
+        if analyzer.isVisible():
+            analyzer.setParent(None)
+            self.curve_layout.removeWidget(analyzer)
+            analyzer.visibility_checkbox.setParent(None)
+            self.curve_layout.removeWidget(analyzer.visibility_checkbox)
+        else:
+            self.curve_layout.addWidget(analyzer.visibility_checkbox)
+            self.curve_layout.addWidget(analyzer)
+            self.crosshair.add_display_plot(analyzer.plot_widget)
+    def setup_formant_buttons(self):
+        self.formant_buttons = []
+        for formant_number in [1, 2, 3]:
+            button = QPushButton(f'Toggle Formant {formant_number}')
+            button.clicked.connect(lambda _, fn=formant_number: self.toggle_formant(fn))
+            self.formant_buttons.append(button)
+            self.curve_layout.addWidget(button)
 
     def toggle_visibility(self, state):
-        # Toggle the visibility based on checkbox state
         self.plot_widget.setVisible(state == Qt.Checked)
     def config_toolbar(self, toolbar: QToolBar) -> None:
 
@@ -338,63 +320,56 @@ class MinMaxAnalyser(QWidget):
         action.setChecked(False)
 
         return action
-
-    def add_point_on_click(
-        self,
-        clicked_curve: pg.PlotDataItem,
-        event: "MouseClickEvent",  # TODO Find where to import this from
-    ) -> None:
-
-        if (
-            not self.manual_peak_maximum_addition.isChecked()
-            and not self.manual_peak_minimum_addition.isChecked()
-        ):
+    def add_point_on_click(self, clicked_curve: pg.PlotDataItem, event: "MouseClickEvent"):
+        if not self.manual_peak_maximum_addition.isChecked() and not self.manual_peak_minimum_addition.isChecked():
             return
 
         mouse_point = event.pos()
         x, y = mouse_point.x(), mouse_point.y()
 
-        points_x, points_y = self.max_points.getData()
+        if self.manual_peak_maximum_addition.isChecked():
+            points_x, points_y = self.max_points.getData()
+            self.max_points.setData(np.append(points_x, x), np.append(points_y, y))
+            self.max_points.show()  
 
-        self.max_points.setData(np.append(points_x, x), np.append(points_y, y))
-
+        elif self.manual_peak_minimum_addition.isChecked():
+            points_x, points_y = self.min_points.getData()
+            self.min_points.setData(np.append(points_x, x), np.append(points_y, y))
+            self.min_points.show() 
     def remove_peak_on_click(self, clicked_scatter_plot, clicked_points):
         if not self.manual_peak_removal.isChecked():
             return
 
-        self.plot_widget.setCursor(Qt.PointingHandCursor)
-
-        points_data = list(clicked_scatter_plot.getData())
-        points_data[0] = list(points_data[0])
-        points_data[1] = list(points_data[1])
+        points_data = clicked_scatter_plot.getData()
+        points_x, points_y = points_data[0], points_data[1]
 
         to_remove = []
-
         for point in clicked_points:
-            pos = point.viewPos()
+            pos = point.pos()
 
-            x_idx = points_data[0].index(pos.x())
+            for i, (px, py) in enumerate(zip(points_x, points_y)):
+                if (px == pos.x()) and (py == pos.y()):
+                    to_remove.append(i)
 
-            if points_data[1][x_idx] != pos.y():
-                continue
+        points_x = np.delete(points_x, to_remove)
+        points_y = np.delete(points_y, to_remove)
 
-            to_remove.append(x_idx)
+        clicked_scatter_plot.setData(points_x, points_y)
 
-        for idx in sorted(to_remove, reverse=True):
-            points_data[0].pop(idx)
-            points_data[1].pop(idx)
+        self.plot_widget.unsetCursor()
 
-        clicked_scatter_plot.setData(*points_data)
 
-    def compute_min(self, interval) -> None:
-        if self.get_interval is not None:
-            interval = self.get_interval()
-        else:
-            interval = None
+    def compute_min(self):
+        interval = self.get_interval()
+        if interval is None:
+            print("No region selected.")
+            return
 
-        x_min, y_min = self.extremum.analyse_minimum(self.x, self.y, interval)
-        # No minimum found
+        start, end = interval
+        x_min, y_min = self.extremum.analyse_minimum(self.x, self.y, (start, end))  
+
         if len(x_min) == 0 or len(y_min) == 0:
+            print("No minimums found within the selected region.")
             return
 
         self.min_points = pg.ScatterPlotItem(
@@ -410,18 +385,18 @@ class MinMaxAnalyser(QWidget):
         self.min_points.sigClicked.connect(self.remove_peak_on_click)
         self.plot_widget.getPlotItem().addItem(self.min_points)
 
-    def compute_max(self, interval) -> None:
-        if self.get_interval is not None:
-            interval = self.get_interval()
-        else:
-            interval = None
-
-        x_max, y_max = self.extremum.analyse_maximum(self.x, self.y, interval)
-
-        # No maximum found
-        if len(x_max) == 0 or len(y_max) == 0:
+    def compute_max(self):
+        interval = self.get_interval()
+        if interval is None:
+            print("No region selected.")
             return
 
+        start, end = interval
+        x_max, y_max = self.extremum.analyse_maximum(self.x, self.y, (start, end)) 
+
+        if len(x_max) == 0 or len(y_max) == 0:
+            print("No maximums found within the selected region.")
+            return
         self.max_points = pg.ScatterPlotItem(
             name="max",
             x=x_max,
@@ -448,7 +423,7 @@ class AudioAnalyzer(QMainWindow):
         self._createMenuBar()
         main_widget = QWidget(self)
         layout = QHBoxLayout()
-
+        self.textgrid_visibility_checkboxes = {}
         self.spectrogram_widget = None
         self.spectrogram_stacked_widget = QStackedWidget()
         curve_area, self.curve_layout = self.curves_container()
@@ -457,9 +432,23 @@ class AudioAnalyzer(QMainWindow):
 
         layout.addWidget(self.spectrogram_stacked_widget)
         layout.addWidget(self.button_container())
+        self.central_plots = []
 
         main_widget.setLayout(layout)
         self.setCentralWidget(main_widget)
+        self.selected_region = pg.LinearRegionItem()
+        self.selected_region.setZValue(10)  
+        self.selected_region.hide()  
+        self.textgrid_visibility_checkboxes = {}
+    def add_selection_tool(self, plot_widget):
+        plot_widget.addItem(self.selected_region)
+        self.selected_region.show()
+        self.selected_region.sigRegionChanged.connect(self.on_region_changed)
+    def on_region_changed(self):
+        region = self.selected_region.getRegion()
+        print("Selected region from", region[0], "to", region[1])
+
+
     def _createMenuBar(self):
         menuBar = QMenuBar(self)
         self.setMenuBar(menuBar)
@@ -534,8 +523,8 @@ class AudioAnalyzer(QMainWindow):
         snd = sound_data.get_sound()
         self.spc = sound_data.get_spectrogram()
 
-        # Ajouter le tracé audio au QStackedWidget
         sound_widget = create_plot_widget(snd.timestamps, snd.amplitudes[0])
+        self.add_selection_tool(sound_widget)  # Ajouter l'outil de sélection au widget
         self.curve_layout.addWidget(sound_widget)
 
         spectrogram_widget = None
@@ -551,10 +540,10 @@ class AudioAnalyzer(QMainWindow):
         audio_data = load_channel(file_path)
         x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
 
+        self.add_selection_tool(sound_widget)  # Ajouter l'outil de sélection au widget
         a = MinMaxAnalyser(
-            "Mfcc", x_mfccs, y_mfccs, MinMaxFinder(), self.get_selected_tier_interval
+            "Mfcc", x_mfccs, y_mfccs, MinMaxFinder(), self.get_selected_region_interval
         )
-
         self.crosshair = Crosshair([sound_widget])
 
         if self.spectrogram_widget is not None:
@@ -562,8 +551,9 @@ class AudioAnalyzer(QMainWindow):
 
         self.a = a
         self.crosshair.add_display_plot(a.plot_widget)
-        self.curve_layout.addWidget(a)
 
+        self.curve_layout.addWidget(a.visibility_checkbox)  
+        self.curve_layout.addWidget(a)
     def toggle_spectrogram(self):
         if self.spectrogram_loaded:
             self.spectrogram_widget.setParent(None)
@@ -572,6 +562,8 @@ class AudioAnalyzer(QMainWindow):
             for analyzer in self.formant_analyzers:
                 analyzer.setParent(None)
                 self.curve_layout.removeWidget(analyzer)
+                analyzer.visibility_checkbox.setParent(None)
+                self.curve_layout.removeWidget(analyzer.visibility_checkbox)
             return
 
         if not hasattr(self, 'spc') or not self.spc:
@@ -584,12 +576,9 @@ class AudioAnalyzer(QMainWindow):
         self.spectrogram_loaded = True
         self.crosshair.add_central_plot(self.spectrogram_widget)
 
-        selected_tier_interval = self.get_selected_tier_interval()
-        if selected_tier_interval is None:
-            return
 
-        start = float(selected_tier_interval.start_time)
-        end = float(selected_tier_interval.end_time)
+        start,end = self.get_selected_region_interval()
+
 
         if not hasattr(self, 'formant_analyzers'):
             self.formant_analyzers = []
@@ -597,13 +586,22 @@ class AudioAnalyzer(QMainWindow):
             f_times, f_values = calc_formant(parselmouth.Sound(self.file_path), start, end, formant_number)
             self.spectrogram_widget.plot(f_times, f_values, pen=['r', 'b', 'g'][formant_number-1])
             analyzer = MinMaxAnalyser(
-                f"Formant {formant_number}", f_times, f_values, MinMaxFinder(), lambda:selected_tier_interval
+                f"Formant {formant_number}", f_times, f_values, MinMaxFinder(), self.get_selected_region_interval
             )
-            
-            self.formant_analyzers.append(analyzer)
-            self.curve_layout.addWidget(analyzer.visibility_checkbox)  
-            self.curve_layout.addWidget(analyzer)  
+
+            print(analyzer)
+            self.curve_layout.addWidget(analyzer)
+            self.curve_layout.addWidget(analyzer.visibility_checkbox)
+            self.curve_layout.addWidget(analyzer)
             self.crosshair.add_display_plot(analyzer.plot_widget)
+
+
+
+    def link_plots(self):
+        if not self.central_plots:
+            return
+        for p in self.central_plots:
+            p.setXLink(self.central_plots[0])
 
     def load_eva(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -630,9 +628,11 @@ class AudioAnalyzer(QMainWindow):
                     times,
                     channel,
                     MinMaxFinder(),
-                    self.get_selected_tier_interval,
+                    self.get_selected_region_interval,
             )
 
+            self.curve_layout.addWidget(a)
+            self.curve_layout.addWidget(a.visibility_checkbox)
             self.curve_layout.addWidget(a)
             self.crosshair.add_display_plot(a.plot_widget)
 
@@ -647,6 +647,11 @@ class AudioAnalyzer(QMainWindow):
 
             return t
 
+        return None
+    def get_selected_region_interval(self):
+        if self.selected_region.isVisible():
+            start, end = self.selected_region.getRegion()
+            return (start, end)
         return None
 
     def tier_plot_clicked(self, tier_plot, event):
@@ -679,7 +684,7 @@ class AudioAnalyzer(QMainWindow):
             self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)"
         )
         if not filepath:
-            # TODO Display pop up error
+            # TODO:
             return
 
         tgt_textgrid = tgt.io.read_textgrid(filepath)
@@ -692,6 +697,18 @@ class AudioAnalyzer(QMainWindow):
 
         self.curve_layout.addWidget(self.textgrid)
 
+        self.display_textgrid_checkbox = QCheckBox("Afficher TextGrid", self)
+        self.display_textgrid_checkbox.setChecked(True)
+        self.display_textgrid_checkbox.stateChanged.connect(self.toggle_textgrid_display)
+
+        self.curve_layout.addWidget(self.display_textgrid_checkbox)
+
+    def toggle_textgrid_display(self, state):
+        if state == Qt.Checked:
+            self.textgrid.show()
+        else:
+
+            self.textgrid.hide()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
