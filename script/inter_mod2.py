@@ -869,7 +869,7 @@ class AudioAnalyzer(QMainWindow):
                 channel,
                 MinMaxFinder(),
                 self.get_selected_region_interval,
-                secondary_viewbox=None  # Ensure to pass the correct secondary_viewbox if needed
+                secondary_viewbox=None  
             )
 
             self.curve_layout.addWidget(a)
