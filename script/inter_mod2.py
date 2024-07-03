@@ -231,13 +231,14 @@ class MinMaxAnalyser(QWidget):
     max_points: pg.ScatterPlotItem
     min_points: pg.ScatterPlotItem
 
-    def __init__(self, name: str, x, y, extremum: MinMaxFinder, get_interval_func) -> None:
+    def __init__(self, name: str, x, y, extremum: MinMaxFinder, get_interval_func, secondary_viewbox=None) -> None:
         super().__init__()
         self.name = name
         self.x = x
         self.y = y
         self.extremum = extremum
         self.get_interval = get_interval_func  
+        self.secondary_viewbox = secondary_viewbox
 
         self.plot_widget = None  
         
@@ -401,7 +402,7 @@ class MinMaxAnalyser(QWidget):
             print(f"No minimums found within the selected region ({start}, {end}).")
             return
 
-        self.min_points = pg.ScatterPlotItem(
+        min_points = pg.ScatterPlotItem(
             name="min",
             x=x_min,
             y=y_min,
@@ -411,8 +412,12 @@ class MinMaxAnalyser(QWidget):
             brush=pg.mkBrush("r"),
         )
 
+        self.min_points.addPoints(x=x_min, y=y_min)
         self.min_points.sigClicked.connect(self.remove_peak_on_click)
-        self.plot_widget.getPlotItem().addItem(self.min_points)
+        if self.secondary_viewbox:
+            self.secondary_viewbox.addItem(min_points)
+        else:
+            self.plot_widget.addItem(min_points)
 
     def compute_max(self):
         interval = self.get_interval()
@@ -426,7 +431,8 @@ class MinMaxAnalyser(QWidget):
         if len(x_max) == 0 or len(y_max) == 0:
             print("No maximums found within the selected region.")
             return
-        self.max_points = pg.ScatterPlotItem(
+
+        max_points = pg.ScatterPlotItem(
             name="max",
             x=x_max,
             y=y_max,
@@ -436,8 +442,13 @@ class MinMaxAnalyser(QWidget):
             brush=pg.mkBrush("b"),
         )
 
+        self.max_points.addPoints(x=x_max, y=y_max)
         self.max_points.sigClicked.connect(self.remove_peak_on_click)
-        self.plot_widget.getPlotItem().addItem(self.max_points)
+        if self.secondary_viewbox:
+            self.secondary_viewbox.addItem(max_points)
+        else:
+            self.plot_widget.addItem(max_points)
+
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
     spectrogram_stacked_widget: QStackedWidget
@@ -635,7 +646,11 @@ class AudioAnalyzer(QMainWindow):
                     pen=pg.mkPen("g"),
                     brush=pg.mkBrush("b"),
                 )
-                panel.addItem(max_points)
+                # Ensure we add to the correct view box
+                if hasattr(panel, 'secondary_viewbox') and curve.getViewBox() is panel.secondary_viewbox:
+                    panel.secondary_viewbox.addItem(max_points)
+                else:
+                    panel.addItem(max_points)
 
     def compute_min(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
@@ -662,7 +677,11 @@ class AudioAnalyzer(QMainWindow):
                     pen=pg.mkPen("r"),
                     brush=pg.mkBrush("r"),
                 )
-                panel.addItem(min_points)
+                # Ensure we add to the correct view box
+                if hasattr(panel, 'secondary_viewbox') and curve.getViewBox() is panel.secondary_viewbox:
+                    panel.secondary_viewbox.addItem(min_points)
+                else:
+                    panel.addItem(min_points)
 
     def toggle_visibility(self, row, state):
         panel_combo_box = self.dashboard.cellWidget(row, 3)
@@ -850,6 +869,7 @@ class AudioAnalyzer(QMainWindow):
                 channel,
                 MinMaxFinder(),
                 self.get_selected_region_interval,
+                secondary_viewbox=None  # Ensure to pass the correct secondary_viewbox if needed
             )
 
             self.curve_layout.addWidget(a)
