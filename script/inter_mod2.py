@@ -159,20 +159,35 @@ class Crosshair:
             l.setPos(mousePoint.x())
 
 class MinMaxFinder:
+
+    def find_in_interval(
+        self,
+        times: list[float],
+        values: list[float],
+        interval: tuple[float, float]
+    ) -> tuple[np.ndarray[float], np.ndarray[float]]:
+        start, end = interval
+
+        interval_times = []
+        interval_values = []
+
+        for time, value in zip(times, values):
+            in_interval: bool = start <= time and time <= end
+
+            if not in_interval:
+                continue
+
+            interval_times.append(time)
+            interval_values.append(value)
+
+        return np.array(interval_times), np.array(interval_values)
+
     def analyse_minimum(self, x, y, interval):
         if interval is None:
             print("No interval specified.")
             return [], []
-        start, end = interval
-        fs = 200  # fréquence d'échantillonnage pour l'indexation
-        start_index = int(start * fs)
-        end_index = int(end * fs)
-        
-        start_index = max(start_index, 0)
-        end_index = min(end_index, len(y))
-        
-        interval_times = x[start_index:end_index]
-        interval_values = y[start_index:end_index]
+
+        interval_times, interval_values = self.find_in_interval(x, y, interval)
         
         min_peaks, _ = scipy.signal.find_peaks(-interval_values)
         if len(min_peaks) == 0:
@@ -187,16 +202,8 @@ class MinMaxFinder:
         if interval is None:
             print("No interval specified.")
             return [], []
-        start, end = interval
-        fs = 200  # fréquence d'échantillonnage pour l'indexation
-        start_index = int(start * fs)
-        end_index = int(end * fs)
-        
-        start_index = max(start_index, 0)
-        end_index = min(end_index, len(y))
-        
-        interval_times = x[start_index:end_index]
-        interval_values = y[start_index:end_index]
+
+        interval_times, interval_values = self.find_in_interval(x, y, interval)
         
         max_peaks, _ = scipy.signal.find_peaks(interval_values)
         if len(max_peaks) == 0:
@@ -261,6 +268,7 @@ class MinMaxAnalyser(QWidget):
         layout.addWidget(self.plot_widget)
 
         self.setLayout(layout)
+
     def toggle_formant(self, formant_number):
         if not hasattr(self, 'formant_analyzers') or len(self.formant_analyzers) < formant_number:
             return
@@ -369,7 +377,7 @@ class MinMaxAnalyser(QWidget):
         x_min, y_min = self.extremum.analyse_minimum(self.x, self.y, (start, end))  
 
         if len(x_min) == 0 or len(y_min) == 0:
-            print("No minimums found within the selected region.")
+            print(f"No minimums found within the selected region ({start}, {end}).")
             return
 
         self.min_points = pg.ScatterPlotItem(
@@ -554,6 +562,7 @@ class AudioAnalyzer(QMainWindow):
 
         self.curve_layout.addWidget(a.visibility_checkbox)  
         self.curve_layout.addWidget(a)
+
     def toggle_spectrogram(self):
         if self.spectrogram_loaded:
             self.spectrogram_widget.setParent(None)
@@ -590,6 +599,7 @@ class AudioAnalyzer(QMainWindow):
             )
 
             print(analyzer)
+            self.formant_analyzers.append(analyzer)
             self.curve_layout.addWidget(analyzer)
             self.curve_layout.addWidget(analyzer.visibility_checkbox)
             self.curve_layout.addWidget(analyzer)
