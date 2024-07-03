@@ -533,6 +533,7 @@ class AudioAnalyzer(QMainWindow):
         self.selected_region.setZValue(10)
         self.selected_region.hide()
         self.textgrid_visibility_checkboxes = {}
+
     def fix_y_axis_limits(self, plot_widget):
         view_box = plot_widget.getPlotItem().getViewBox()
         y_range = view_box.viewRange()[1]
@@ -546,6 +547,7 @@ class AudioAnalyzer(QMainWindow):
         plot_widget.addItem(self.selected_region)
         self.selected_region.show()
         self.selected_region.sigRegionChanged.connect(self.on_region_changed)
+        
     def save_y_ranges(self, panel):
         self.y_range_main_before = panel.viewRange()[1]
         if hasattr(panel, 'secondary_viewbox'):
@@ -573,10 +575,10 @@ class AudioAnalyzer(QMainWindow):
             mfcc_curve = panel.plot(x_mfccs, y_mfccs, pen='r', clear=False)
 
             if not hasattr(panel, 'plot_items'):
-                panel.plot_items = []
-            panel.plot_items.append(mfcc_curve)
+                panel.plot_items = {}
+            panel.plot_items[row] = [mfcc_curve]
 
-        elif index == 2:  
+        elif index == 2:  # Formant
             start, end = self.get_selected_region_interval()
             if start is None or end is None:
                 return  
@@ -602,8 +604,8 @@ class AudioAnalyzer(QMainWindow):
             panel.secondary_viewbox.addItem(formant_curve_f3)
 
             if not hasattr(panel, 'plot_items'):
-                panel.plot_items = []
-            panel.plot_items.extend([formant_curve_f1, formant_curve_f2, formant_curve_f3])
+                panel.plot_items = {}
+            panel.plot_items[row] = [formant_curve_f1, formant_curve_f2, formant_curve_f3]
 
             panel.getPlotItem().showAxis('right')
             panel.getPlotItem().getAxis('right').setLabel('Formants')
@@ -615,24 +617,25 @@ class AudioAnalyzer(QMainWindow):
         if not hasattr(panel, 'plot_items'):
             return
 
-        for plot_item in panel.plot_items:
-            x, y = plot_item.xData, plot_item.yData
-            max_finder = MinMaxFinder()
-            x_max, y_max = max_finder.analyse_maximum(x, y, self.get_selected_region_interval())
+        for plot_item in panel.plot_items.values():
+            for curve in plot_item:
+                x, y = curve.xData, curve.yData
+                max_finder = MinMaxFinder()
+                x_max, y_max = max_finder.analyse_maximum(x, y, self.get_selected_region_interval())
 
-            if len(x_max) == 0 or len(y_max) == 0:
-                print("No maximums found within the selected region.")
-                continue
+                if len(x_max) == 0 or len(y_max) == 0:
+                    print("No maximums found within the selected region.")
+                    continue
 
-            max_points = pg.ScatterPlotItem(
-                x=x_max,
-                y=y_max,
-                symbol="x",
-                size=10,
-                pen=pg.mkPen("g"),
-                brush=pg.mkBrush("b"),
-            )
-            panel.addItem(max_points)
+                max_points = pg.ScatterPlotItem(
+                    x=x_max,
+                    y=y_max,
+                    symbol="x",
+                    size=10,
+                    pen=pg.mkPen("g"),
+                    brush=pg.mkBrush("b"),
+                )
+                panel.addItem(max_points)
 
     def compute_min(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
@@ -641,48 +644,37 @@ class AudioAnalyzer(QMainWindow):
         if not hasattr(panel, 'plot_items'):
             return
 
-        for plot_item in panel.plot_items:
-            x, y = plot_item.xData, plot_item.yData
-            min_finder = MinMaxFinder()
-            x_min, y_min = min_finder.analyse_minimum(x, y, self.get_selected_region_interval())
+        for plot_item in panel.plot_items.values():
+            for curve in plot_item:
+                x, y = curve.xData, curve.yData
+                min_finder = MinMaxFinder()
+                x_min, y_min = min_finder.analyse_minimum(x, y, self.get_selected_region_interval())
 
-            if len(x_min) == 0 or len(y_min) == 0:
-                print(f"No minimums found within the selected region.")
-                continue
+                if len(x_min) == 0 or len(y_min) == 0:
+                    print(f"No minimums found within the selected region.")
+                    continue
 
-            min_points = pg.ScatterPlotItem(
-                x=x_min,
-                y=y_min,
-                symbol="o",
-                size=10,
-                pen=pg.mkPen("r"),
-                brush=pg.mkBrush("r"),
-            )
-            panel.addItem(min_points)
+                min_points = pg.ScatterPlotItem(
+                    x=x_min,
+                    y=y_min,
+                    symbol="o",
+                    size=10,
+                    pen=pg.mkPen("r"),
+                    brush=pg.mkBrush("r"),
+                )
+                panel.addItem(min_points)
 
     def toggle_visibility(self, row, state):
         panel_combo_box = self.dashboard.cellWidget(row, 3)
         selected_panel = int(panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
 
-        if state == Qt.Checked:
-            if hasattr(panel, f'curve_{row}'):
-                panel.plotItem.addItem(getattr(panel, f'curve_{row}'))
-            if hasattr(panel, f'secondary_curve_f1_{row}'):
-                panel.secondary_viewbox.addItem(getattr(panel, f'secondary_curve_f1_{row}'))
-            if hasattr(panel, f'secondary_curve_f2_{row}'):
-                panel.secondary_viewbox.addItem(getattr(panel, f'secondary_curve_f2_{row}'))
-            if hasattr(panel, f'secondary_curve_f3_{row}'):
-                panel.secondary_viewbox.addItem(getattr(panel, f'secondary_curve_f3_{row}'))
-        else:
-            if hasattr(panel, f'curve_{row}'):
-                panel.plotItem.removeItem(getattr(panel, f'curve_{row}'))
-            if hasattr(panel, f'secondary_curve_f1_{row}'):
-                panel.secondary_viewbox.removeItem(getattr(panel, f'secondary_curve_f1_{row}'))
-            if hasattr(panel, f'secondary_curve_f2_{row}'):
-                panel.secondary_viewbox.removeItem(getattr(panel, f'secondary_curve_f2_{row}'))
-            if hasattr(panel, f'secondary_curve_f3_{row}'):
-                panel.secondary_viewbox.removeItem(getattr(panel, f'secondary_curve_f3_{row}'))
+        if hasattr(panel, 'plot_items') and row in panel.plot_items:
+            for plot_item in panel.plot_items[row]:
+                if state == Qt.Checked:
+                    plot_item.show()
+                else:
+                    plot_item.hide()
 
     def _createMenuBar(self):
         menuBar = QMenuBar(self)
