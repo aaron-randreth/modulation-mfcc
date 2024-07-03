@@ -244,7 +244,7 @@ class MinMaxAnalyser(QWidget):
         
         self.visibility_checkbox = QCheckBox(f"Toggle visibility for {name}")
         self.visibility_checkbox.setChecked(True) 
-        self.visibility_checkbox.stateChanged.connect(self.toggle_visibility)
+
         self.__init_ui()
 
         self.max_points = pg.ScatterPlotItem(pen=pg.mkPen("g"), brush=pg.mkBrush("b"))
@@ -302,22 +302,6 @@ class MinMaxAnalyser(QWidget):
             self.formant_buttons.append(button)
             self.curve_layout.addWidget(button)
 
-    def toggle_visibility(self, row, state):
-        panel_combo_box = self.dashboard.cellWidget(row, 3)
-        selected_panel = int(panel_combo_box.currentText()) - 1
-        panel = self.panels[selected_panel][1]
-
-        if not hasattr(panel, 'plot_items'):
-            return
-
-        if state == Qt.Checked:
-            # Show the curve
-            for plot_item in panel.plot_items:
-                plot_item.setVisible(True)
-        else:
-            # Hide the curve
-            for plot_item in panel.plot_items:
-                plot_item.setVisible(False)
 
 
     def config_toolbar(self, toolbar: QToolBar) -> None:
@@ -646,7 +630,6 @@ class AudioAnalyzer(QMainWindow):
                     pen=pg.mkPen("g"),
                     brush=pg.mkBrush("b"),
                 )
-                # Ensure we add to the correct view box
                 if hasattr(panel, 'secondary_viewbox') and curve.getViewBox() is panel.secondary_viewbox:
                     panel.secondary_viewbox.addItem(max_points)
                 else:
@@ -677,7 +660,6 @@ class AudioAnalyzer(QMainWindow):
                     pen=pg.mkPen("r"),
                     brush=pg.mkBrush("r"),
                 )
-                # Ensure we add to the correct view box
                 if hasattr(panel, 'secondary_viewbox') and curve.getViewBox() is panel.secondary_viewbox:
                     panel.secondary_viewbox.addItem(min_points)
                 else:
@@ -819,23 +801,7 @@ class AudioAnalyzer(QMainWindow):
         self.spectrogram_loaded = True
         self.crosshair.add_central_plot(self.spectrogram_widget)
 
-        start, end = self.get_selected_region_interval()
 
-        if not hasattr(self, 'formant_analyzers'):
-            self.formant_analyzers = []
-        for formant_number in [1, 2, 3]:
-            f_times, f_values = calc_formant(parselmouth.Sound(self.file_path), start, end, formant_number)
-            self.spectrogram_widget.plot(f_times, f_values, pen=['r', 'b', 'g'][formant_number-1])
-            analyzer = MinMaxAnalyser(
-                f"Formant {formant_number}", f_times, f_values, MinMaxFinder(), self.get_selected_region_interval
-            )
-
-            print(analyzer)
-            self.formant_analyzers.append(analyzer)
-            self.curve_layout.addWidget(analyzer)
-            self.curve_layout.addWidget(analyzer.visibility_checkbox)
-            self.curve_layout.addWidget(analyzer)
-            self.crosshair.add_display_plot(analyzer.plot_widget)
 
     def link_plots(self):
         if not self.central_plots:
