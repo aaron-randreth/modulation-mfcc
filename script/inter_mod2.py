@@ -4,6 +4,7 @@ from math import sqrt
 import scipy
 import numpy as np
 from librosa import feature as lf
+from PyQt5.QtWidgets import QCheckBox, QTableWidget, QTableWidgetItem, QComboBox
 from PyQt5.QtWidgets import QCheckBox
 from PyQt5.QtWidgets import (
     QMenu,
@@ -44,25 +45,29 @@ from datasources.mfcc import load_channel, get_MFCCS_change
 from scrollable_window import Info, InfoBox, Output
 
 pg.setConfigOptions(foreground="black", background="w")
-def calc_formant(sound: parselmouth.Sound, start_time: float, end_time: float, formant_number: int) -> tuple[list[float], list[float]]:
+def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float) -> tuple[list[float], list[float], list[float], list[float], list[float], list[float]]:
     formants = sound.to_formant_burg()
 
     time_values = formants.ts()
-    formant1_dict = {time: formants.get_value_at_time(formant_number=formant_number, time=time) for time in time_values}
+    formant_values = {i: {time: formants.get_value_at_time(formant_number=i, time=time) for time in time_values} for i in range(1, 4)}
 
-    preserved_formant1_dict = {time: formant1_dict[time] for time in time_values if start_time <= time <= end_time}
+    preserved_formants = {i: {time: formant_values[i][time] for time in time_values if start_time <= time <= end_time} for i in range(1, 4)}
 
-    interp_func1 = scipy.interpolate.interp1d(list(preserved_formant1_dict.keys()), list(preserved_formant1_dict.values()), kind='linear')
-    time_values_interp1 = np.linspace(min(preserved_formant1_dict.keys()), max(preserved_formant1_dict.keys()), num=1000)
-    interpolated_formants = interp_func1(time_values_interp1)
+    interpolated_formants = {}
+    smoothed_formants = {}
+    resampled_formants = {}
 
-    smoothed_curve1 = scipy.signal.savgol_filter(interpolated_formants, window_length=101, polyorder=1)
+    for i in range(1, 4):
+        interp_func = scipy.interpolate.interp1d(list(preserved_formants[i].keys()), list(preserved_formants[i].values()), kind='linear')
+        time_values_interp = np.linspace(min(preserved_formants[i].keys()), max(preserved_formants[i].keys()), num=1000)
+        interpolated_formants[i] = interp_func(time_values_interp)
+        smoothed_formants[i] = scipy.signal.savgol_filter(interpolated_formants[i], window_length=101, polyorder=1)
+        new_time_values = np.arange(start_time, end_time, 1/200.0)
+        interp_func_resampled = scipy.interpolate.interp1d(time_values_interp, smoothed_formants[i], kind='linear', fill_value="extrapolate")
+        resampled_formants[i] = interp_func_resampled(new_time_values)
 
-    # Ré-échantillonner la courbe lissée à 200 Hz
-    new_time_values = np.arange(start_time, end_time, 1/200.0)
-    interp_func2 = scipy.interpolate.interp1d(time_values_interp1, smoothed_curve1, kind='linear', fill_value="extrapolate")
-    resampled_formants = interp_func2(new_time_values)
-    return new_time_values, resampled_formants
+    return new_time_values, resampled_formants[1], resampled_formants[2], resampled_formants[3]
+
 def create_plot_widget(x, y):
     plot = pg.PlotWidget()
     plot.plot(x=x, y=y)
@@ -248,6 +253,7 @@ class MinMaxAnalyser(QWidget):
         self.plot_widget.addItem(self.min_points)
         self.max_points.hide()
         self.min_points.hide()
+
     def __init_ui(self) -> None:
         layout = QVBoxLayout()
 
@@ -269,6 +275,9 @@ class MinMaxAnalyser(QWidget):
 
         self.setLayout(layout)
 
+    def update_plot(self, x, y):
+        self.curve.setData(x, y)
+
     def toggle_formant(self, formant_number):
         if not hasattr(self, 'formant_analyzers') or len(self.formant_analyzers) < formant_number:
             return
@@ -283,6 +292,7 @@ class MinMaxAnalyser(QWidget):
             self.curve_layout.addWidget(analyzer.visibility_checkbox)
             self.curve_layout.addWidget(analyzer)
             self.crosshair.add_display_plot(analyzer.plot_widget)
+
     def setup_formant_buttons(self):
         self.formant_buttons = []
         for formant_number in [1, 2, 3]:
@@ -291,10 +301,25 @@ class MinMaxAnalyser(QWidget):
             self.formant_buttons.append(button)
             self.curve_layout.addWidget(button)
 
-    def toggle_visibility(self, state):
-        self.plot_widget.setVisible(state == Qt.Checked)
-    def config_toolbar(self, toolbar: QToolBar) -> None:
+    def toggle_visibility(self, row, state):
+        panel_combo_box = self.dashboard.cellWidget(row, 3)
+        selected_panel = int(panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
 
+        if not hasattr(panel, 'plot_items'):
+            return
+
+        if state == Qt.Checked:
+            # Show the curve
+            for plot_item in panel.plot_items:
+                plot_item.setVisible(True)
+        else:
+            # Hide the curve
+            for plot_item in panel.plot_items:
+                plot_item.setVisible(False)
+
+
+    def config_toolbar(self, toolbar: QToolBar) -> None:
         self.do_maximum_analysis = QAction("Analyse max", self)
         self.do_minimum_analysis = QAction("Analyse min", self)
 
@@ -318,16 +343,12 @@ class MinMaxAnalyser(QWidget):
         toolbar.addAction(self.manual_peak_maximum_addition)
         toolbar.addAction(self.manual_peak_minimum_addition)
 
-    def toggleable_action(
-        self,
-        label: str,
-    ) -> QAction:
-
+    def toggleable_action(self, label: str) -> QAction:
         action = QAction(label, self)
         action.setCheckable(True)
         action.setChecked(False)
-
         return action
+
     def add_point_on_click(self, clicked_curve: pg.PlotDataItem, event: "MouseClickEvent"):
         if not self.manual_peak_maximum_addition.isChecked() and not self.manual_peak_minimum_addition.isChecked():
             return
@@ -344,6 +365,7 @@ class MinMaxAnalyser(QWidget):
             points_x, points_y = self.min_points.getData()
             self.min_points.setData(np.append(points_x, x), np.append(points_y, y))
             self.min_points.show() 
+
     def remove_peak_on_click(self, clicked_scatter_plot, clicked_points):
         if not self.manual_peak_removal.isChecked():
             return
@@ -365,7 +387,6 @@ class MinMaxAnalyser(QWidget):
         clicked_scatter_plot.setData(points_x, points_y)
 
         self.plot_widget.unsetCursor()
-
 
     def compute_min(self):
         interval = self.get_interval()
@@ -417,8 +438,6 @@ class MinMaxAnalyser(QWidget):
 
         self.max_points.sigClicked.connect(self.remove_peak_on_click)
         self.plot_widget.getPlotItem().addItem(self.max_points)
-
-
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
     spectrogram_stacked_widget: QStackedWidget
@@ -430,7 +449,10 @@ class AudioAnalyzer(QMainWindow):
         self.setWindowTitle("Audio Analyzer")
         self._createMenuBar()
         main_widget = QWidget(self)
-        layout = QHBoxLayout()
+        main_layout = QHBoxLayout()  
+        left_layout = QVBoxLayout()  
+        right_layout = QVBoxLayout() 
+        
         self.textgrid_visibility_checkboxes = {}
         self.spectrogram_widget = None
         self.spectrogram_stacked_widget = QStackedWidget()
@@ -438,24 +460,229 @@ class AudioAnalyzer(QMainWindow):
         self.spectrogram_stacked_widget.addWidget(curve_area)
         self.file_path = ""
 
-        layout.addWidget(self.spectrogram_stacked_widget)
-        layout.addWidget(self.button_container())
+        left_layout.addWidget(self.spectrogram_stacked_widget)
+        left_layout.addWidget(self.button_container())
         self.central_plots = []
 
-        main_widget.setLayout(layout)
-        self.setCentralWidget(main_widget)
         self.selected_region = pg.LinearRegionItem()
-        self.selected_region.setZValue(10)  
-        self.selected_region.hide()  
+        self.selected_region.setZValue(10)
+        self.selected_region.hide()
         self.textgrid_visibility_checkboxes = {}
+
+        self.panels = []
+        for i in range(1, 5):
+            panel = QWidget(self)
+            panel_layout = QVBoxLayout(panel)
+            panel_title = QLabel(f"Panel {i}")
+            panel_layout.addWidget(panel_title)
+            empty_plot = pg.PlotWidget()
+            panel_layout.addWidget(empty_plot)
+            left_layout.addWidget(panel)
+            self.panels.append((panel, empty_plot))
+
+        for i in range(1, 4):
+            self.panels[i][1].setXLink(self.panels[0][1])
+
+
+        self.dashboard = QTableWidget(4, 5, self)   
+        self.dashboard.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Visibility"])
+
+        for row in range(4):
+            combo_box = QComboBox()
+            combo_box.addItems(["Option 1", "Mfcc 2", "formant "])
+            combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_panel(row, index))
+            self.dashboard.setCellWidget(row, 0, combo_box)
+
+            for col in range(1, 3):
+                button = QPushButton(f"Button {row+1},{col+1}")
+                self.dashboard.setCellWidget(row, col, button)
+
+            panel_combo_box = QComboBox()
+            panel_combo_box.addItems(["1", "2", "3", "4"])
+            self.dashboard.setCellWidget(row, 3, panel_combo_box)
+
+            visibility_checkbox = QCheckBox()
+            visibility_checkbox.setChecked(True) 
+            visibility_checkbox.stateChanged.connect(lambda state, row=row: self.toggle_visibility(row, state))
+            self.dashboard.setCellWidget(row, 4, visibility_checkbox)
+        
+        right_layout.addWidget(self.dashboard)
+
+        self.analysis_toolbar = QToolBar(self)
+        self.analysis_panel_combo_box = QComboBox()
+        self.analysis_panel_combo_box.addItems(["1", "2", "3", "4"])
+        self.analysis_toolbar.addWidget(QLabel("Select Panel:"))
+        self.analysis_toolbar.addWidget(self.analysis_panel_combo_box)
+
+        self.do_maximum_analysis = QAction("Analyse max", self)
+        self.do_minimum_analysis = QAction("Analyse min", self)
+        self.do_maximum_analysis.triggered.connect(self.compute_max)
+        self.do_minimum_analysis.triggered.connect(self.compute_min)
+        self.analysis_toolbar.addAction(self.do_maximum_analysis)
+        self.analysis_toolbar.addAction(self.do_minimum_analysis)
+        
+        right_layout.addWidget(self.analysis_toolbar)
+
+        main_layout.addLayout(left_layout)
+        main_layout.addLayout(right_layout)
+
+        main_widget.setLayout(main_layout)
+        self.setCentralWidget(main_widget)
+
+        self.selected_region = pg.LinearRegionItem()
+        self.selected_region.setZValue(10)
+        self.selected_region.hide()
+        self.textgrid_visibility_checkboxes = {}
+    def fix_y_axis_limits(self, plot_widget):
+        view_box = plot_widget.getPlotItem().getViewBox()
+        y_range = view_box.viewRange()[1]
+        view_box.setLimits(yMin=y_range[0], yMax=y_range[1])
+
+        if hasattr(plot_widget, 'secondary_viewbox'):
+            secondary_y_range = plot_widget.secondary_viewbox.viewRange()[1]
+            plot_widget.secondary_viewbox.setLimits(yMin=secondary_y_range[0], yMax=secondary_y_range[1])
+
     def add_selection_tool(self, plot_widget):
         plot_widget.addItem(self.selected_region)
         self.selected_region.show()
         self.selected_region.sigRegionChanged.connect(self.on_region_changed)
+    def save_y_ranges(self, panel):
+        self.y_range_main_before = panel.viewRange()[1]
+        if hasattr(panel, 'secondary_viewbox'):
+            self.y_range_secondary_before = panel.secondary_viewbox.viewRange()[1]
+
+    def restore_y_ranges(self, panel):
+        if hasattr(self, 'y_range_main_before'):
+            panel.setYRange(self.y_range_main_before[0], self.y_range_main_before[1])
+        if hasattr(self, 'y_range_secondary_before') and hasattr(panel, 'secondary_viewbox'):
+            panel.secondary_viewbox.setYRange(self.y_range_secondary_before[0], self.y_range_secondary_before[1])
+
     def on_region_changed(self):
         region = self.selected_region.getRegion()
         print("Selected region from", region[0], "to", region[1])
 
+    def update_panel(self, row, index):
+        panel_combo_box = self.dashboard.cellWidget(row, 3)
+        selected_panel = int(panel_combo_box.currentText()) - 1
+
+        if index == 1:  # mfcc
+            audio_data = load_channel(self.file_path)
+            x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
+
+            panel = self.panels[selected_panel][1]
+            mfcc_curve = panel.plot(x_mfccs, y_mfccs, pen='r', clear=False)
+
+            if not hasattr(panel, 'plot_items'):
+                panel.plot_items = []
+            panel.plot_items.append(mfcc_curve)
+
+        elif index == 2:  
+            start, end = self.get_selected_region_interval()
+            if start is None or end is None:
+                return  
+
+            f_times, f1_values, f2_values, f3_values = calc_formants(parselmouth.Sound(self.file_path), start, end)
+
+            panel = self.panels[selected_panel][1]
+
+            if not hasattr(panel, 'secondary_viewbox'):
+                panel.secondary_viewbox = pg.ViewBox()
+                panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
+                panel.getPlotItem().getAxis('right').linkToView(panel.secondary_viewbox)
+                panel.secondary_viewbox.setXLink(panel)
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+
+            formant_curve_f1 = pg.PlotDataItem(f_times, f1_values, pen='b')
+            formant_curve_f2 = pg.PlotDataItem(f_times, f2_values, pen='g')
+            formant_curve_f3 = pg.PlotDataItem(f_times, f3_values, pen='m')
+
+            panel.secondary_viewbox.addItem(formant_curve_f1)
+            panel.secondary_viewbox.addItem(formant_curve_f2)
+            panel.secondary_viewbox.addItem(formant_curve_f3)
+
+            if not hasattr(panel, 'plot_items'):
+                panel.plot_items = []
+            panel.plot_items.extend([formant_curve_f1, formant_curve_f2, formant_curve_f3])
+
+            panel.getPlotItem().showAxis('right')
+            panel.getPlotItem().getAxis('right').setLabel('Formants')
+
+    def compute_max(self):
+        selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
+
+        if not hasattr(panel, 'plot_items'):
+            return
+
+        for plot_item in panel.plot_items:
+            x, y = plot_item.xData, plot_item.yData
+            max_finder = MinMaxFinder()
+            x_max, y_max = max_finder.analyse_maximum(x, y, self.get_selected_region_interval())
+
+            if len(x_max) == 0 or len(y_max) == 0:
+                print("No maximums found within the selected region.")
+                continue
+
+            max_points = pg.ScatterPlotItem(
+                x=x_max,
+                y=y_max,
+                symbol="x",
+                size=10,
+                pen=pg.mkPen("g"),
+                brush=pg.mkBrush("b"),
+            )
+            panel.addItem(max_points)
+
+    def compute_min(self):
+        selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
+
+        if not hasattr(panel, 'plot_items'):
+            return
+
+        for plot_item in panel.plot_items:
+            x, y = plot_item.xData, plot_item.yData
+            min_finder = MinMaxFinder()
+            x_min, y_min = min_finder.analyse_minimum(x, y, self.get_selected_region_interval())
+
+            if len(x_min) == 0 or len(y_min) == 0:
+                print(f"No minimums found within the selected region.")
+                continue
+
+            min_points = pg.ScatterPlotItem(
+                x=x_min,
+                y=y_min,
+                symbol="o",
+                size=10,
+                pen=pg.mkPen("r"),
+                brush=pg.mkBrush("r"),
+            )
+            panel.addItem(min_points)
+
+    def toggle_visibility(self, row, state):
+        panel_combo_box = self.dashboard.cellWidget(row, 3)
+        selected_panel = int(panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
+
+        if state == Qt.Checked:
+            if hasattr(panel, f'curve_{row}'):
+                panel.plotItem.addItem(getattr(panel, f'curve_{row}'))
+            if hasattr(panel, f'secondary_curve_f1_{row}'):
+                panel.secondary_viewbox.addItem(getattr(panel, f'secondary_curve_f1_{row}'))
+            if hasattr(panel, f'secondary_curve_f2_{row}'):
+                panel.secondary_viewbox.addItem(getattr(panel, f'secondary_curve_f2_{row}'))
+            if hasattr(panel, f'secondary_curve_f3_{row}'):
+                panel.secondary_viewbox.addItem(getattr(panel, f'secondary_curve_f3_{row}'))
+        else:
+            if hasattr(panel, f'curve_{row}'):
+                panel.plotItem.removeItem(getattr(panel, f'curve_{row}'))
+            if hasattr(panel, f'secondary_curve_f1_{row}'):
+                panel.secondary_viewbox.removeItem(getattr(panel, f'secondary_curve_f1_{row}'))
+            if hasattr(panel, f'secondary_curve_f2_{row}'):
+                panel.secondary_viewbox.removeItem(getattr(panel, f'secondary_curve_f2_{row}'))
+            if hasattr(panel, f'secondary_curve_f3_{row}'):
+                panel.secondary_viewbox.removeItem(getattr(panel, f'secondary_curve_f3_{row}'))
 
     def _createMenuBar(self):
         menuBar = QMenuBar(self)
@@ -512,11 +739,9 @@ class AudioAnalyzer(QMainWindow):
         button_parent = QWidget()
         layout = QVBoxLayout()
 
-
         button_parent.setLayout(layout)
 
         return button_parent
-
 
     def load_audio(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -532,11 +757,10 @@ class AudioAnalyzer(QMainWindow):
         self.spc = sound_data.get_spectrogram()
 
         sound_widget = create_plot_widget(snd.timestamps, snd.amplitudes[0])
-        self.add_selection_tool(sound_widget)  # Ajouter l'outil de sélection au widget
+        self.add_selection_tool(sound_widget)  
         self.curve_layout.addWidget(sound_widget)
 
         spectrogram_widget = None
-        # Charger initialement le spectrogramme si l'état est activé
         if self.spectrogram_loaded:
             self.spectrogram_widget = specto.create_spectrogram_plot(
                 self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix
@@ -544,11 +768,10 @@ class AudioAnalyzer(QMainWindow):
             self.spectrogram_stacked_widget.addWidget(self.spectrogram_widget)
             self.spectrogram_stacked_widget.setCurrentWidget(self.spectrogram_widget)
 
-
         audio_data = load_channel(file_path)
         x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
 
-        self.add_selection_tool(sound_widget)  # Ajouter l'outil de sélection au widget
+        self.add_selection_tool(sound_widget) 
         a = MinMaxAnalyser(
             "Mfcc", x_mfccs, y_mfccs, MinMaxFinder(), self.get_selected_region_interval
         )
@@ -585,9 +808,7 @@ class AudioAnalyzer(QMainWindow):
         self.spectrogram_loaded = True
         self.crosshair.add_central_plot(self.spectrogram_widget)
 
-
-        start,end = self.get_selected_region_interval()
-
+        start, end = self.get_selected_region_interval()
 
         if not hasattr(self, 'formant_analyzers'):
             self.formant_analyzers = []
@@ -604,8 +825,6 @@ class AudioAnalyzer(QMainWindow):
             self.curve_layout.addWidget(analyzer.visibility_checkbox)
             self.curve_layout.addWidget(analyzer)
             self.crosshair.add_display_plot(analyzer.plot_widget)
-
-
 
     def link_plots(self):
         if not self.central_plots:
@@ -634,11 +853,11 @@ class AudioAnalyzer(QMainWindow):
             channel = audio_data[i]
 
             a = MinMaxAnalyser(
-                    f"EVA-{1}",
-                    times,
-                    channel,
-                    MinMaxFinder(),
-                    self.get_selected_region_interval,
+                f"EVA-{1}",
+                times,
+                channel,
+                MinMaxFinder(),
+                self.get_selected_region_interval,
             )
 
             self.curve_layout.addWidget(a)
@@ -658,6 +877,7 @@ class AudioAnalyzer(QMainWindow):
             return t
 
         return None
+
     def get_selected_region_interval(self):
         if self.selected_region.isVisible():
             start, end = self.selected_region.getRegion()
@@ -717,7 +937,6 @@ class AudioAnalyzer(QMainWindow):
         if state == Qt.Checked:
             self.textgrid.show()
         else:
-
             self.textgrid.hide()
 
 if __name__ == "__main__":
