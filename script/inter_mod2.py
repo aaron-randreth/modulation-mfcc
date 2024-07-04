@@ -163,6 +163,22 @@ class Crosshair:
         for l in self.crosshair_lines:
             l.setPos(mousePoint.x())
 
+    def add_panel_plot(self, panel_plot):
+        line = pg.InfiniteLine(
+            angle=90,
+            movable=False,
+            pen=pg.mkPen(style=Qt.DashLine, color="g")
+        )
+
+        self.crosshair_lines.append(line)
+        self.central_plots.append(panel_plot)
+
+        panel_plot.addItem(line, ignoreBounds=True)
+        panel_plot.scene().sigMouseMoved.connect(self.move_crosshair)
+
+        self.link_plots()
+
+
 class MinMaxFinder:
 
     def find_in_interval(
@@ -452,18 +468,8 @@ class AudioAnalyzer(QMainWindow):
         self.spectrogram_widget = None
         self.spectrogram_stacked_widget = QStackedWidget()
         curve_area, self.curve_layout = self.curves_container()
-        self.spectrogram_stacked_widget.addWidget(curve_area)
-        self.file_path = ""
 
-        left_layout.addWidget(self.spectrogram_stacked_widget)
-        left_layout.addWidget(self.button_container())
-        self.central_plots = []
-
-        self.selected_region = pg.LinearRegionItem()
-        self.selected_region.setZValue(10)
-        self.selected_region.hide()
-        self.textgrid_visibility_checkboxes = {}
-
+        panels_layout = QVBoxLayout()
         self.panels = []
         for i in range(1, 5):
             panel = QWidget(self)
@@ -471,13 +477,25 @@ class AudioAnalyzer(QMainWindow):
             panel_title = QLabel(f"Panel {i}")
             panel_layout.addWidget(panel_title)
             empty_plot = pg.PlotWidget()
+            empty_plot.setMaximumHeight(165)  
             panel_layout.addWidget(empty_plot)
-            left_layout.addWidget(panel)
+            panels_layout.addWidget(panel)
             self.panels.append((panel, empty_plot))
 
         for i in range(1, 4):
             self.panels[i][1].setXLink(self.panels[0][1])
 
+        left_layout.addWidget(curve_area)  
+        left_layout.addLayout(panels_layout) 
+
+        self.file_path = ""
+        left_layout.addWidget(self.button_container())
+        self.central_plots = []
+
+        self.selected_region = pg.LinearRegionItem()
+        self.selected_region.setZValue(10)
+        self.selected_region.hide()
+        self.textgrid_visibility_checkboxes = {}
 
         self.dashboard = QTableWidget(4, 5, self)   
         self.dashboard.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Visibility"])
@@ -528,6 +546,8 @@ class AudioAnalyzer(QMainWindow):
         self.selected_region.setZValue(10)
         self.selected_region.hide()
         self.textgrid_visibility_checkboxes = {}
+
+        self.crosshair = Crosshair([])
 
     def fix_y_axis_limits(self, plot_widget):
         view_box = plot_widget.getPlotItem().getViewBox()
@@ -604,6 +624,8 @@ class AudioAnalyzer(QMainWindow):
 
             panel.getPlotItem().showAxis('right')
             panel.getPlotItem().getAxis('right').setLabel('Formants')
+
+        self.crosshair.add_panel_plot(panel)
 
     def compute_max(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
@@ -774,10 +796,10 @@ class AudioAnalyzer(QMainWindow):
             self.crosshair.add_central_plot(self.spectrogram_widget)
 
         self.a = a
-        self.crosshair.add_display_plot(a.plot_widget)
+        #self.crosshair.add_display_plot(a.plot_widget)
 
-        self.curve_layout.addWidget(a.visibility_checkbox)  
-        self.curve_layout.addWidget(a)
+        #self.curve_layout.addWidget(a.visibility_checkbox)  
+        #self.curve_layout.addWidget(a)
 
     def toggle_spectrogram(self):
         if self.spectrogram_loaded:
@@ -800,7 +822,6 @@ class AudioAnalyzer(QMainWindow):
         self.curve_layout.insertWidget(1, self.spectrogram_widget)
         self.spectrogram_loaded = True
         self.crosshair.add_central_plot(self.spectrogram_widget)
-
 
 
     def link_plots(self):
