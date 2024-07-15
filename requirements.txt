@@ -1,0 +1,9 @@
+scipy
+numpy
+librosa
+xarray
+PyQt5
+PYQtGraph
+praat-parselmouth
+tgt
+bidict
