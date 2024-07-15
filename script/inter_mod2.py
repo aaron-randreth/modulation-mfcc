@@ -97,6 +97,22 @@ class AudioAnalyzer(QMainWindow):
         self.add_row_button.clicked.connect(self.add_dashboard_row)
         right_layout.addWidget(self.dashboard)
         right_layout.addWidget(self.add_row_button)
+       # Create Zoom Toolbar
+        self.zoom_toolbar = QToolBar(self)
+        self.zoom_toolbar.setStyleSheet("background-color: lightgray;")
+
+        self.zoom_in_action = QAction("Zoom In", self)
+        self.zoom_in_action.triggered.connect(self.zoom_in)
+        self.zoom_out_action = QAction("Zoom Out", self)
+        self.zoom_out_action.triggered.connect(self.zoom_out)
+        self.zoom_to_region_action = QAction("Zoom to Region", self)
+        self.zoom_to_region_action.triggered.connect(self.zoom_to_region)
+        self.zoom_toolbar.addAction(self.zoom_in_action)
+        self.zoom_toolbar.addAction(self.zoom_out_action)
+        self.zoom_toolbar.addAction(self.zoom_to_region_action)
+
+        right_layout.addWidget(self.zoom_toolbar)  # Add zoom toolbar above analysis toolbar
+
         self.analysis_toolbar = QToolBar(self)
         self.analysis_panel_combo_box = QComboBox()
         self.analysis_panel_combo_box.addItems(["1", "2", "3", "4"])
@@ -119,7 +135,7 @@ class AudioAnalyzer(QMainWindow):
         self.manual_peak_removal.setCheckable(True)
         self.analysis_toolbar.addAction(self.manual_peak_maximum_addition)
         self.analysis_toolbar.addAction(self.manual_peak_minimum_addition)
-        self.analysis_toolbar.addAction(self.manual_peak_removal)
+        # self.analysis_toolbar.addAction(self.manual_peak_removal)
         right_layout.addWidget(self.analysis_toolbar)
         right_layout.addStretch(1)  # Ajout d'un espace pour pousser les éléments vers le haut
         right_layout.addWidget(self.create_spectrogram_toggle_button())  # Ajouter le bouton Toggle Spectrogram en bas
@@ -647,6 +663,38 @@ class AudioAnalyzer(QMainWindow):
             plot_item.max_points.setData(points_x, points_y)
             plot_item.max_points.show()
             print("Removed point")
+
+    def zoom_in(self):
+        selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
+        view_range = panel.viewRange()
+        x_range = view_range[0]
+        y_range = view_range[1]
+        zoom_factor = 0.8  # Zoom in by 20%
+        panel.setXRange(x_range[0] + (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2,
+                        x_range[1] - (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2)
+        panel.setYRange(y_range[0] + (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2,
+                        y_range[1] - (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2)
+
+    def zoom_out(self):
+        selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
+        view_range = panel.viewRange()
+        x_range = view_range[0]
+        y_range = view_range[1]
+        zoom_factor = 1.2  # Zoom out by 20%
+        panel.setXRange(x_range[0] + (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2,
+                        x_range[1] - (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2)
+        panel.setYRange(y_range[0] + (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2,
+                        y_range[1] - (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2)
+
+    def zoom_to_region(self):
+        selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
+        panel = self.panels[selected_panel][1]
+        if self.selected_region.isVisible():
+            region = self.selected_region.getRegion()
+            panel.setXRange(region[0], region[1], padding=0)
+            self.restore_y_ranges(panel)
 
 def read_AG50x(path_to_pos_file):
     dims = ["x","z","y","phi","theta","rms","extra"]
