@@ -142,7 +142,6 @@ class MinMaxAnalyser(QtWidgets.QWidget):
 
         mouse_point = plot_item.getViewBox().mapSceneToView(pos)
         x, y = mouse_point.x(), mouse_point.y()
-        print(f"Clicked at x: {x}, y: {y}")  # Affiche les coordonnées du clic
 
         if self.parent().manual_peak_maximum_addition.isChecked():
             points_x, points_y = self.max_points.getData()

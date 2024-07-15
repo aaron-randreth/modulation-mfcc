@@ -151,7 +151,7 @@ class AudioAnalyzer(QMainWindow):
 
         mouse_point = plot_widget.getPlotItem().vb.mapSceneToView(pos)
         x, y = mouse_point.x(), mouse_point.y()
-        print(f"Clicked on panel {panel_index + 1} at x: {x}, y: {y}")
+        # print(f"Clicked on panel {panel_index + 1} at x: {x}, y: {y}")
 
     def add_dashboard_row(self):
         row = self.dashboard.rowCount()
@@ -223,11 +223,15 @@ class AudioAnalyzer(QMainWindow):
 
         right_axis = None
 
+
         if index == 1:  # MFCC
             audio_data = load_channel(self.file_path)
             x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
             mfcc_curve = panel.plot(x_mfccs, y_mfccs, pen='r', clear=False)
-            mfcc_curve.sigClicked.connect(lambda plot_item, points, event: self.add_point_on_click(plot_item, event))
+
+            mfcc_curve.setCurveClickable(True)
+            mfcc_curve.sigClicked.connect(self.add_point_on_click)
+
             print("MFCC curve connected to click event")
             if not hasattr(panel, 'plot_items'):
                 panel.plot_items = {}
@@ -261,7 +265,10 @@ class AudioAnalyzer(QMainWindow):
                 panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
 
             formant_curve = pg.PlotDataItem(f_times, formant_values, pen='b')
-            formant_curve.sigClicked.connect(lambda plot_item, points, event: self.add_point_on_click(plot_item, event))
+
+            formant_curve.setCurveClickable(True)
+            formant_curve.sigClicked.connect(self.add_point_on_click)
+
             print(f"Formant {formant_num} curve connected to click event")
             panel.secondary_viewbox.addItem(formant_curve)
             if not hasattr(panel, 'plot_items'):
@@ -294,7 +301,11 @@ class AudioAnalyzer(QMainWindow):
                 channel_label, ok = QInputDialog.getText(self, "Channel Label", f"Enter label for Channel {channel}")
                 if not ok or not channel_label:
                     channel_label = f"EMA Channel {channel}"
+
                 ema_curve = pg.PlotDataItem(time, channel_data, pen=pg.mkPen(width=2))
+                ema_curve.setCurveClickable(True)
+                ema_curve.sigClicked.connect(self.add_point_on_click)
+
                 panel.tertiary_viewbox.addItem(ema_curve)
                 if not hasattr(panel, 'plot_items'):
                     panel.plot_items = {}
@@ -588,6 +599,54 @@ class AudioAnalyzer(QMainWindow):
                         'Average Max Peaks': avg_max_peaks,
                         'Average All Values': avg_all_values
                     })
+
+    def add_point_on_click(self, plot_item, event):
+        pos = event.scenePos()
+        if not plot_item.getViewBox().sceneBoundingRect().contains(pos):
+            return
+
+        mouse_point = plot_item.getViewBox().mapSceneToView(pos)
+        x, y = mouse_point.x(), mouse_point.y()
+
+        if self.manual_peak_maximum_addition.isChecked():
+            if not hasattr(plot_item, "max_points"):
+                return
+
+            points_x, points_y = plot_item.max_points.getData()
+            closest_index = np.argmin(np.abs(points_x - x))
+            points_x = np.insert(points_x, closest_index, x)
+            points_y = np.insert(points_y, closest_index, y)
+
+            plot_item.max_points.setData(points_x, points_y)
+            plot_item.max_points.show()
+            print("Added max point")
+        elif self.manual_peak_minimum_addition.isChecked():
+            if not hasattr(plot_item, "min_points"):
+                return
+
+            points_x, points_y = plot_item.min_points.getData()
+            closest_index = np.argmin(np.abs(points_x - x))
+            points_x = np.insert(points_x, closest_index, x)
+            points_y = np.insert(points_y, closest_index, y)
+            plot_item.min_points.setData(points_x, points_y)
+            plot_item.min_points.show()
+            print("Added min point")
+        elif self.manual_peak_removal.isChecked():
+
+            if not hasattr(plot_item, "max_points"):
+                return
+
+            if not hasattr(plot_item, "min_points"):
+                return
+
+            points_x, points_y = plot_item.max_points.getData()
+            distances = np.sqrt((points_x - x) ** 2 + (points_y - y) ** 2)
+            closest_index = np.argmin(distances)
+            points_x = np.delete(points_x, closest_index)
+            points_y = np.delete(points_y, closest_index)
+            plot_item.max_points.setData(points_x, points_y)
+            plot_item.max_points.show()
+            print("Removed point")
 
 def read_AG50x(path_to_pos_file):
     dims = ["x","z","y","phi","theta","rms","extra"]
