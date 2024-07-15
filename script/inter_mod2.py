@@ -4,240 +4,24 @@ import scipy
 import numpy as np
 import csv
 from librosa import feature as lf
+
 from PyQt5.QtWidgets import QCheckBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
+
 from PyQt5.QtCore import Qt
 import pyqtgraph as pg
 import parselmouth
 import tgt
 import xarray as xr
+
 from praat_py_ui import tiers as ui_tiers, textgridtools as ui_tgt, spectrogram as specto, parselmouth_calc as calc
+
 from datasources.mfcc import load_channel, get_MFCCS_change
 from scrollable_window import Info, InfoBox, Output
 
+from calc import calc_formants, MinMaxFinder
+from ui import create_plot_widget, SelectableListDialog, Crosshair, MinMaxAnalyser
+
 pg.setConfigOptions(foreground="black", background="w")
-
-def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float):
-    formants = sound.to_formant_burg()
-    time_values = formants.ts()
-    formant_values = {i: {time: formants.get_value_at_time(formant_number=i, time=time) for time in time_values} for i in range(1, 4)}
-    preserved_formants = {i: {time: formant_values[i][time] for time in time_values if start_time <= time <= end_time} for i in range(1, 4)}
-    interpolated_formants = {}
-    smoothed_formants = {}
-    resampled_formants = {}
-
-    for i in range(1, 4):
-        interp_func = scipy.interpolate.interp1d(list(preserved_formants[i].keys()), list(preserved_formants[i].values()), kind='linear')
-        time_values_interp = np.linspace(min(preserved_formants[i].keys()), max(preserved_formants[i].keys()), num=1000)
-        interpolated_formants[i] = interp_func(time_values_interp)
-        smoothed_formants[i] = scipy.signal.savgol_filter(interpolated_formants[i], window_length=101, polyorder=1)
-        new_time_values = np.arange(start_time, end_time, 1/200.0)
-        interp_func_resampled = scipy.interpolate.interp1d(time_values_interp, smoothed_formants[i], kind='linear', fill_value="extrapolate")
-        resampled_formants[i] = interp_func_resampled(new_time_values)
-
-    return new_time_values, resampled_formants[1], resampled_formants[2], resampled_formants[3]
-
-def create_plot_widget(x, y, color='r'):
-    plot = pg.PlotWidget()
-    plot.plot(x=x, y=y, pen=color)
-    return plot
-
-class SelectableListDialog(QDialog):
-    def __init__(self, num_items: int, format_string: str):
-        super().__init__()
-        self.setWindowTitle('Selectable List')
-        self.item_labels = [format_string.format(i) for i in range(num_items)]
-        self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.list_widget.addItems(self.item_labels)
-        self.dialog_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.dialog_buttons.accepted.connect(self.accept)
-        self.dialog_buttons.rejected.connect(self.reject)
-        layout = QVBoxLayout()
-        layout.addWidget(self.list_widget)
-        layout.addWidget(self.dialog_buttons)
-        self.setLayout(layout)
-
-    def get_selected_indices(self) -> list[int]:
-        selected_texts = [item.text() for item in self.list_widget.selectedItems()]
-        return [self.item_labels.index(text) for text in selected_texts]
-
-class Crosshair:
-    def __init__(self, central_plots) -> None:
-        self.central_plots = []
-        self.display_plots = []
-        self.crosshair_lines = []
-        for plot in central_plots:
-            self.add_central_plot(plot)
-        self.link_plots()
-
-    @property
-    def plots(self):
-        return [*self.central_plots, *self.display_plots]
-
-    def link_plots(self):
-        for p in self.plots:
-            p.setXLink(self.central_plots[0])
-
-    def add_central_plot(self, central_plot) -> None:
-        line = pg.InfiniteLine(
-            angle=90,
-            movable=False,
-            pen=pg.mkPen(style=Qt.DashLine, color="r")
-        )
-        self.crosshair_lines.append(line)
-        self.central_plots.append(central_plot)
-        central_plot.addItem(line, ignoreBounds=True)
-        central_plot.scene().sigMouseMoved.connect(self.move_crosshair)
-        self.link_plots()
-
-    def add_display_plot(self, display_plot) -> None:
-        line = pg.InfiniteLine(
-            angle=90,
-            movable=False,
-            pen=pg.mkPen(style=Qt.DashLine, color="b")
-        )
-        self.crosshair_lines.append(line)
-        self.display_plots.append(display_plot)
-        display_plot.addItem(line, ignoreBounds=True)
-        self.link_plots()
-
-    def move_crosshair(self, event):
-        mousePoint = None
-        pos = event
-        for p in self.central_plots:
-            if p.sceneBoundingRect().contains(pos):
-                mousePoint = p.getPlotItem().vb.mapSceneToView(pos)
-        if mousePoint is None:
-            return
-        for l in self.crosshair_lines:
-            l.setPos(mousePoint.x())
-
-    def add_panel_plot(self, panel_plot):
-        line = pg.InfiniteLine(
-            angle=90,
-            movable=False,
-            pen=pg.mkPen(style=Qt.DashLine, color="g")
-        )
-        self.crosshair_lines.append(line)
-        self.central_plots.append(panel_plot)
-        panel_plot.addItem(line, ignoreBounds=True)
-        panel_plot.scene().sigMouseMoved.connect(self.move_crosshair)
-        self.link_plots()
-
-class MinMaxFinder:
-    def find_in_interval(self, times: list[float], values: list[float], interval: tuple[float, float]) -> tuple[np.ndarray[float], np.ndarray[float]]:
-        start, end = interval
-        interval_times = []
-        interval_values = []
-        for time, value in zip(times, values):
-            in_interval: bool = start <= time and time <= end
-            if not in_interval:
-                continue
-            interval_times.append(time)
-            interval_values.append(value)
-        return np.array(interval_times), np.array(interval_values)
-
-    def analyse_minimum(self, x, y, interval):
-        if interval is None:
-            print("No interval specified.")
-            return [], []
-        interval_times, interval_values = self.find_in_interval(x, y, interval)
-        min_peaks, _ = scipy.signal.find_peaks(-interval_values)
-        if len(min_peaks) == 0:
-            return [], []
-        min_times = interval_times[min_peaks]
-        min_values = interval_values[min_peaks]
-        return min_times, min_values
-
-    def analyse_maximum(self, x, y, interval):
-        if interval is None:
-            print("No interval specified.")
-            return [], []
-        interval_times, interval_values = self.find_in_interval(x, y, interval)
-        max_peaks, _ = scipy.signal.find_peaks(interval_values)
-        if len(max_peaks) == 0:
-            return [], []
-        max_times = interval_times[max_peaks]
-        max_values = interval_values[max_peaks]
-        return max_times, max_values
-
-class MinMaxAnalyser(QWidget):
-    def __init__(self, name: str, x, y, extremum: MinMaxFinder, get_interval_func, color='r', secondary_viewbox=None, tertiary_viewbox=None) -> None:
-        super().__init__()
-        self.name = name
-        self.x = x
-        self.y = y
-        self.extremum = extremum
-        self.get_interval = get_interval_func
-        self.color = color
-        self.secondary_viewbox = secondary_viewbox
-        self.tertiary_viewbox = tertiary_viewbox
-        self.plot_widget = None
-        self.visibility_checkbox = QCheckBox(f"Toggle visibility for {name}")
-        self.visibility_checkbox.setChecked(True)
-        self.__init_ui()
-        self.max_points = pg.ScatterPlotItem(pen=pg.mkPen("g"), brush=pg.mkBrush("b"))
-        self.min_points = pg.ScatterPlotItem(pen=pg.mkPen("r"), brush=pg.mkBrush("r"))
-        self.plot_widget.addItem(self.max_points)
-        self.plot_widget.addItem(self.min_points)
-        self.max_points.hide()
-        self.min_points.hide()
-
-    def __init_ui(self) -> None:
-        layout = QVBoxLayout()
-        self.toolbar = QToolBar()
-        self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setMouseEnabled(x=True, y=False)
-        self.plot_widget.showGrid(x=True, y=True)
-        self.plot_widget.setMaximumHeight(400)
-        
-        # Utilisez ScatterPlotItem pour rendre les points cliquables
-        self.curve = pg.ScatterPlotItem(x=self.x, y=self.y, pen=self.color, brush=pg.mkBrush(self.color))
-        self.curve.sigClicked.connect(self.add_point_on_click)
-        self.plot_widget.addItem(self.curve)
-        
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.plot_widget)
-        self.setLayout(layout)
-
-    def update_plot(self, x, y):
-        self.curve.setData(x=x, y=y)
-
-    def add_point_on_click(self, plot_item, event):
-        pos = event[0].scenePos()
-        if not plot_item.getViewBox().sceneBoundingRect().contains(pos):
-            return
-
-        mouse_point = plot_item.getViewBox().mapSceneToView(pos)
-        x, y = mouse_point.x(), mouse_point.y()
-        print(f"Clicked at x: {x}, y: {y}")  # Affiche les coordonnées du clic
-
-        if self.parent().manual_peak_maximum_addition.isChecked():
-            points_x, points_y = self.max_points.getData()
-            closest_index = np.argmin(np.abs(points_x - x))
-            points_x = np.insert(points_x, closest_index, x)
-            points_y = np.insert(points_y, closest_index, y)
-            self.max_points.setData(points_x, points_y)
-            self.max_points.show()
-            print("Added max point")
-        elif self.parent().manual_peak_minimum_addition.isChecked():
-            points_x, points_y = self.min_points.getData()
-            closest_index = np.argmin(np.abs(points_x - x))
-            points_x = np.insert(points_x, closest_index, x)
-            points_y = np.insert(points_y, closest_index, y)
-            self.min_points.setData(points_x, points_y)
-            self.min_points.show()
-            print("Added min point")
-        elif self.parent().manual_peak_removal.isChecked():
-            points_x, points_y = self.max_points.getData()
-            distances = np.sqrt((points_x - x) ** 2 + (points_y - y) ** 2)
-            closest_index = np.argmin(distances)
-            points_x = np.delete(points_x, closest_index)
-            points_y = np.delete(points_y, closest_index)
-            self.max_points.setData(points_x, points_y)
-            self.max_points.show()
-            print("Removed point")
-
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
