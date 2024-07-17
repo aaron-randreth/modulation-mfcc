@@ -4,6 +4,12 @@ import scipy
 import numpy as np
 import csv
 from librosa import feature as lf
+from pydub import AudioSegment
+from PyQt5.QtCore import QTimer
+import threading
+import time
+from pydub import AudioSegment
+from pydub.playback import play
 
 from PyQt5.QtWidgets import QCheckBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
 
@@ -57,7 +63,6 @@ class AudioAnalyzer(QMainWindow):
         left_layout.addWidget(curve_area)
         left_layout.addLayout(panels_layout)
         self.file_path = ""
-        left_layout.addWidget(self.button_container())
         self.central_plots = []
         self.selected_region = pg.LinearRegionItem()
         self.selected_region.setZValue(10)
@@ -100,6 +105,19 @@ class AudioAnalyzer(QMainWindow):
        # Create Zoom Toolbar
         self.zoom_toolbar = QToolBar(self)
         self.zoom_toolbar.setStyleSheet("background-color: lightgray;")
+        self.audio_cursor = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('r', width=2))
+        self.audio_cursor = pg.LinearRegionItem([0, 0.01], movable=False, brush=pg.mkBrush(0, 255, 0, 50))
+        self.audio_cursor.hide()
+        self.playing = False
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self.update_cursor)
+
+        self.audio_cursor.hide()
+        self.playing = False
+        self.player = None
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self.update_cursor)
+        right_layout.addWidget(self.button_container())
 
         self.zoom_in_action = QAction("Zoom In", self)
         self.zoom_in_action.triggered.connect(self.zoom_in)
@@ -150,6 +168,49 @@ class AudioAnalyzer(QMainWindow):
         self.textgrid_visibility_checkboxes = {}
         self.crosshair = Crosshair([])
         self.connect_panel_clicks()
+    def play_selected_region(self):
+        if not self.file_path:
+            return
+
+        region = self.get_selected_region_interval()
+        if region is None:
+            return
+
+        start, end = region
+        duration = end - start
+
+        audio = AudioSegment.from_wav(self.file_path)
+        selected_audio = audio[start * 1000:end * 1000]  
+        def play_audio():
+            self.playing = True
+            play(selected_audio)
+            self.playing = False
+
+        threading.Thread(target=play_audio).start()
+
+        self.audio_cursor.setRegion([start, start])
+        self.audio_cursor.show()
+        threading.Thread(target=self.animate_cursor, args=(start, end, duration)).start()
+
+    def animate_cursor(self, start, end, duration):
+        start_time = time.time()
+        while time.time() - start_time < duration:
+            elapsed_time = time.time() - start_time
+            current_pos = start + elapsed_time
+            self.audio_cursor.setRegion([start, current_pos])
+            time.sleep(0.01) 
+        self.stop_audio()
+
+    def stop_audio(self):
+        self.audio_cursor.hide()
+        self.playing = False
+        self.update_timer.stop()
+
+    def update_cursor(self):
+        if self.playing:
+            current_pos = self.audio_cursor.getRegion()[1]
+            self.audio_cursor.setRegion([self.audio_cursor.getRegion()[0], current_pos + 0.01])  
+
 
     def connect_panel_clicks(self):
         for i, (_, plot_widget) in enumerate(self.panels):
@@ -280,16 +341,14 @@ class AudioAnalyzer(QMainWindow):
                 panel.secondary_viewbox.setXLink(panel)
                 panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
 
-            formant_curve = pg.PlotDataItem(f_times, formant_values, pen='b')
-
-            formant_curve.setCurveClickable(True)
-            formant_curve.sigClicked.connect(self.add_point_on_click)
+            formant_points = pg.ScatterPlotItem(x=f_times, y=formant_values, symbol='o', size=5, pen=pg.mkPen('b'), brush=pg.mkBrush('b'))
+            formant_points.sigClicked.connect(self.add_point_on_click)
 
             print(f"Formant {formant_num} curve connected to click event")
-            panel.secondary_viewbox.addItem(formant_curve)
+            panel.secondary_viewbox.addItem(formant_points)
             if not hasattr(panel, 'plot_items'):
                 panel.plot_items = {}
-            panel.plot_items[row] = [formant_curve]
+            panel.plot_items[row] = [formant_points]
             panel.getPlotItem().showAxis('right')
             panel.getPlotItem().getAxis('right').setLabel(formant_label)
 
@@ -366,44 +425,60 @@ class AudioAnalyzer(QMainWindow):
         panel = self.panels[selected_panel][1]
         if not hasattr(panel, 'plot_items'):
             return
-        for plot_item in panel.plot_items.values():
-            for curve in plot_item:
-                x, y = curve.xData, curve.yData
+        for plot_items in panel.plot_items.values():
+            for item in plot_items:
+                if isinstance(item, pg.PlotDataItem):
+                    x, y = item.xData, item.yData
+                elif isinstance(item, pg.ScatterPlotItem):
+                    spots = item.points()
+                    x = np.array([spot.pos()[0] for spot in spots])
+                    y = np.array([spot.pos()[1] for spot in spots])
+                else:
+                    continue
+
                 max_finder = MinMaxFinder()
                 x_max, y_max = max_finder.analyse_maximum(x, y, self.get_selected_region_interval())
                 if len(x_max) == 0 or len(y_max) == 0:
                     print("No maximums found within the selected region.")
                     continue
                 max_points = pg.ScatterPlotItem(x=x_max, y=y_max, symbol="x", size=10, pen=pg.mkPen("g"), brush=pg.mkBrush("b"))
-                if hasattr(panel, 'secondary_viewbox') and curve.getViewBox() is panel.secondary_viewbox:
+                if hasattr(panel, 'secondary_viewbox') and item.getViewBox() is panel.secondary_viewbox:
                     panel.secondary_viewbox.addItem(max_points)
-                elif hasattr(panel, 'tertiary_viewbox') and curve.getViewBox() is panel.tertiary_viewbox:
+                elif hasattr(panel, 'tertiary_viewbox') and item.getViewBox() is panel.tertiary_viewbox:
                     panel.tertiary_viewbox.addItem(max_points)
                 else:
                     panel.addItem(max_points)
-                curve.max_points = max_points  # Associer les points de maximum à la courbe
+                item.max_points = max_points  # Associate max points with the scatter plot item
 
     def compute_min(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
         if not hasattr(panel, 'plot_items'):
             return
-        for plot_item in panel.plot_items.values():
-            for curve in plot_item:
-                x, y = curve.xData, curve.yData
+        for plot_items in panel.plot_items.values():
+            for item in plot_items:
+                if isinstance(item, pg.PlotDataItem):
+                    x, y = item.xData, item.yData
+                elif isinstance(item, pg.ScatterPlotItem):
+                    spots = item.points()
+                    x = np.array([spot.pos()[0] for spot in spots])
+                    y = np.array([spot.pos()[1] for spot in spots])
+                else:
+                    continue
+
                 min_finder = MinMaxFinder()
                 x_min, y_min = min_finder.analyse_minimum(x, y, self.get_selected_region_interval())
                 if len(x_min) == 0 or len(y_min) == 0:
-                    print(f"No minimums found within the selected region.")
+                    print("No minimums found within the selected region.")
                     continue
                 min_points = pg.ScatterPlotItem(x=x_min, y=y_min, symbol="o", size=10, pen=pg.mkPen("r"), brush=pg.mkBrush("r"))
-                if hasattr(panel, 'secondary_viewbox') and curve.getViewBox() is panel.secondary_viewbox:
+                if hasattr(panel, 'secondary_viewbox') and item.getViewBox() is panel.secondary_viewbox:
                     panel.secondary_viewbox.addItem(min_points)
-                elif hasattr(panel, 'tertiary_viewbox') and curve.getViewBox() is panel.tertiary_viewbox:
+                elif hasattr(panel, 'tertiary_viewbox') and item.getViewBox() is panel.tertiary_viewbox:
                     panel.tertiary_viewbox.addItem(min_points)
                 else:
                     panel.addItem(min_points)
-                curve.min_points = min_points  # Associer les points de minimum à la courbe
+                item.min_points = min_points  
 
 
     def change_curve_color(self, row, color):
@@ -426,9 +501,7 @@ class AudioAnalyzer(QMainWindow):
         loadAudioAction = QAction("Load Audio File", self)
         loadAudioAction.triggered.connect(self.load_audio)
         fileMenu.addAction(loadAudioAction)
-        loadEVAAction = QAction("Load EVA File", self)
-        loadEVAAction.triggered.connect(self.load_eva)
-        fileMenu.addAction(loadEVAAction)
+
         loadAnnotationAction = QAction("Load Textgrid Annotation", self)
         loadAnnotationAction.triggered.connect(self.load_annotations)
         fileMenu.addAction(loadAnnotationAction)
@@ -452,10 +525,13 @@ class AudioAnalyzer(QMainWindow):
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(curve_parent)
         return scroll_area, scroll_layout
-
     def button_container(self) -> QWidget:
         button_parent = QWidget()
         layout = QVBoxLayout()
+        play_button = QPushButton("Play Selected Region")
+        play_button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
+        play_button.clicked.connect(self.play_selected_region)
+        layout.addWidget(play_button)
         button_parent.setLayout(layout)
         return button_parent
 
@@ -468,8 +544,11 @@ class AudioAnalyzer(QMainWindow):
         snd = sound_data.get_sound()
         self.spc = sound_data.get_spectrogram()
         sound_widget = create_plot_widget(snd.timestamps, snd.amplitudes[0], color='k')
+        sound_widget.addItem(self.audio_cursor)  # Ajouter le curseur ici
         self.add_selection_tool(sound_widget)
         self.curve_layout.addWidget(sound_widget)
+        
+
         spectrogram_widget = None
         if self.spectrogram_loaded:
             self.spectrogram_widget = specto.create_spectrogram_plot(self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix)
@@ -508,24 +587,6 @@ class AudioAnalyzer(QMainWindow):
         for p in self.central_plots:
             p.setXLink(self.central_plots[0])
 
-    def load_eva(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Audio File", "", "Audio Files (*.wav)")
-        if not file_path:
-            return
-        audio_data = load_channel(file_path)
-        times = np.arange(len(audio_data[0, :])) / 200
-        channel_nb = len(audio_data)
-        selection = SelectableListDialog(channel_nb, "Channel {}")
-        if selection.exec_() != QDialog.Accepted:
-            return
-        for i in selection.get_selected_indices():
-            channel = audio_data[i]
-            a = MinMaxAnalyser(f"EVA-{1}", times, channel, MinMaxFinder(), self.get_selected_region_interval, secondary_viewbox=None)
-            self.curve_layout.addWidget(a)
-            self.curve_layout.addWidget(a.visibility_checkbox)
-            self.curve_layout.addWidget(a)
-            self.crosshair.add_display_plot(a.plot_widget)
-            self.a=a
 
     def get_selected_tier_interval(self) -> None:
         if self.textgrid is None:
@@ -600,12 +661,21 @@ class AudioAnalyzer(QMainWindow):
                 combo_box = self.dashboard.cellWidget(row, 0)
                 curve_name = combo_box.currentText()
                 for curve in plot_items:
+                    if isinstance(curve, pg.PlotDataItem):
+                        x, y = curve.xData, curve.yData
+                    elif isinstance(curve, pg.ScatterPlotItem):
+                        spots = curve.points()
+                        x = np.array([spot.pos()[0] for spot in spots])
+                        y = np.array([spot.pos()[1] for spot in spots])
+                    else:
+                        continue
+
                     interval = self.get_selected_region_interval()
                     min_finder = MinMaxFinder()
                     max_finder = MinMaxFinder()
-                    x_min, y_min = min_finder.analyse_minimum(curve.xData, curve.yData, interval)
-                    x_max, y_max = max_finder.analyse_maximum(curve.xData, curve.yData, interval)
-                    interval_times, interval_values = min_finder.find_in_interval(curve.xData, curve.yData, interval)
+                    x_min, y_min = min_finder.analyse_minimum(x, y, interval)
+                    x_max, y_max = max_finder.analyse_maximum(x, y, interval)
+                    interval_times, interval_values = min_finder.find_in_interval(x, y, interval)
                     avg_min_peaks = np.mean(y_min) if len(y_min) > 0 else None
                     avg_max_peaks = np.mean(y_max) if len(y_max) > 0 else None
                     avg_all_values = np.mean(interval_values) if len(interval_values) > 0 else None
@@ -615,6 +685,7 @@ class AudioAnalyzer(QMainWindow):
                         'Average Max Peaks': avg_max_peaks,
                         'Average All Values': avg_all_values
                     })
+
 
     def add_point_on_click(self, plot_item, event):
         pos = event.scenePos()
