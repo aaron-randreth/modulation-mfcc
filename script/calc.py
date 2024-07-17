@@ -3,25 +3,25 @@ import numpy as np
 
 import parselmouth
 
-def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float):
-    formants = sound.to_formant_burg()
+def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float, energy_threshold: float = 40.0):
+    formants = sound.to_formant_burg(time_step=0.005, max_number_of_formants=5, maximum_formant=5500, window_length=0.025, pre_emphasis_from=50)
     time_values = formants.ts()
-    formant_values = {i: {time: formants.get_value_at_time(formant_number=i, time=time) for time in time_values} for i in range(1, 4)}
-    preserved_formants = {i: {time: formant_values[i][time] for time in time_values if start_time <= time <= end_time} for i in range(1, 4)}
-    interpolated_formants = {}
-    smoothed_formants = {}
-    resampled_formants = {}
+    
+    formant_values = {i: {time: formants.get_value_at_time(formant_number=i, time=time) for time in time_values if start_time <= time <= end_time} for i in range(1, 4)}
+    
+    intensities = sound.to_intensity()
+    frame_energies = {time: intensities.get_value(time) for time in time_values}
+    
+    filtered_formant_values = {
+        i: {time: value for time, value in formant_values[i].items() if frame_energies.get(time, 0) > energy_threshold}
+        for i in range(1, 4)
+    }
+    
+    time_values_filtered = sorted(filtered_formant_values[1].keys())
+    resampled_formants = {i: np.array([filtered_formant_values[i][time] for time in time_values_filtered]) for i in range(1, 4)}
+    
+    return time_values_filtered, resampled_formants[1], resampled_formants[2], resampled_formants[3]
 
-    for i in range(1, 4):
-        interp_func = scipy.interpolate.interp1d(list(preserved_formants[i].keys()), list(preserved_formants[i].values()), kind='linear')
-        time_values_interp = np.linspace(min(preserved_formants[i].keys()), max(preserved_formants[i].keys()), num=1000)
-        interpolated_formants[i] = interp_func(time_values_interp)
-        smoothed_formants[i] = scipy.signal.savgol_filter(interpolated_formants[i], window_length=101, polyorder=1)
-        new_time_values = np.arange(start_time, end_time, 1/200.0)
-        interp_func_resampled = scipy.interpolate.interp1d(time_values_interp, smoothed_formants[i], kind='linear', fill_value="extrapolate")
-        resampled_formants[i] = interp_func_resampled(new_time_values)
-
-    return new_time_values, resampled_formants[1], resampled_formants[2], resampled_formants[3]
 
 class MinMaxFinder:
     def find_in_interval(self, times: list[float], values: list[float], interval: tuple[float, float]) -> tuple[np.ndarray[float], np.ndarray[float]]:
