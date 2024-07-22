@@ -1149,8 +1149,11 @@ class AudioAnalyzer(QMainWindow):
                             panel.quaternary_viewbox.removeItem(item)
                         else:
                             plot_widget.removeItem(item)
+                    if hasattr(item, 'max_points'):
+                        item.max_points.clear()
+                    if hasattr(item, 'min_points'):
+                        item.min_points.clear()
                 del plot_widget.plot_items
-
     def reset_dashboard(self):
         self.dashboard.clearContents()
         self.dashboard.setRowCount(4)
@@ -1190,8 +1193,8 @@ class AudioAnalyzer(QMainWindow):
             derived_combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_derived(row, index))
             self.dashboard.setCellWidget(row, 6, derived_combo_box) 
 
+        
     def clear_panels(self):
-    
         for panel, plot_widget in self.panels:
             plot_widget.clear()
             plot_widget.getPlotItem().getAxis('left').setLabel('')
@@ -1208,6 +1211,10 @@ class AudioAnalyzer(QMainWindow):
                     items = plot_widget.plot_items[row]
                     for item in items:
                         item.clear()
+                        if hasattr(item, 'max_points'):
+                            item.max_points.clear()
+                        if hasattr(item, 'min_points'):
+                            item.min_points.clear()
                     del plot_widget.plot_items[row]
             if hasattr(panel, 'secondary_viewbox'):
                 panel.secondary_viewbox.clear()
