@@ -844,8 +844,10 @@ class AudioAnalyzer(QMainWindow):
         for row in panel.plot_items.keys():
             combo_box = self.dashboard.cellWidget(row, 0)
             curve_name = combo_box.currentText()
+            derived_combo_box = self.dashboard.cellWidget(row, 6)
+            is_derived = derived_combo_box.currentIndex() == 1
             fieldnames.extend([
-                f"{curve_name} X Values", f"{curve_name} Y Values"
+                f"{curve_name} X Values", f"{curve_name} Y Values", f"{curve_name} Derived"
             ])
 
             for curve in panel.plot_items[row]:
@@ -879,6 +881,7 @@ class AudioAnalyzer(QMainWindow):
                 for t, y_val in zip(time_axis, y_interpolated):
                     all_rows[t][f"{curve_name} X Values"] = t
                     all_rows[t][f"{curve_name} Y Values"] = y_val
+                    all_rows[t][f"{curve_name} Derived"] = "Yes" if is_derived else "No"
 
         if textgrid_intervals:
             for t in time_axis:
