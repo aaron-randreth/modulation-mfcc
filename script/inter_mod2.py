@@ -795,8 +795,6 @@ class AudioAnalyzer(QMainWindow):
             self.textgrid.show()
         else:
             self.textgrid.hide()
-
-
     def export_to_csv(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
@@ -825,7 +823,7 @@ class AudioAnalyzer(QMainWindow):
 
         time_axis = np.arange(min_time, max_time, 0.005)
 
-        fieldnames = ['Time']
+        fieldnames = ['Time', 'TextGrid Interval']
         measurements = {}
         all_rows = {t: {'Time': t} for t in time_axis}
 
@@ -846,10 +844,9 @@ class AudioAnalyzer(QMainWindow):
         for row in panel.plot_items.keys():
             combo_box = self.dashboard.cellWidget(row, 0)
             curve_name = combo_box.currentText()
-            fieldnames.append(f"{curve_name} Y Values")
-            fieldnames.append(f"{curve_name}_MoyenneAllValues")
-            fieldnames.append(f"{curve_name}_MoyennePicMax")
-            fieldnames.append(f"{curve_name}_MoyennePicMin")
+            fieldnames.extend([
+                f"{curve_name} X Values", f"{curve_name} Y Values"
+            ])
 
             for curve in panel.plot_items[row]:
                 if isinstance(curve, pg.PlotDataItem):
@@ -880,25 +877,41 @@ class AudioAnalyzer(QMainWindow):
                 }
 
                 for t, y_val in zip(time_axis, y_interpolated):
+                    all_rows[t][f"{curve_name} X Values"] = t
                     all_rows[t][f"{curve_name} Y Values"] = y_val
 
-        sorted_rows = [all_rows[t] for t in sorted(all_rows.keys())]
-
         if textgrid_intervals:
-            fieldnames.append("TextGrid Interval")
             for t in time_axis:
                 all_rows[t]["TextGrid Interval"] = textgrid_intervals.get(t, "")
+
+        # Ensure all fields from all rows and measurements are in fieldnames
+        for row in all_rows.values():
+            for key in row.keys():
+                if key not in fieldnames:
+                    fieldnames.append(key)
+
+        for curve_name, values in measurements.items():
+            for measure in ['MoyenneAllValues', 'MoyennePicMax', 'MoyennePicMin']:
+                fieldname = f"{curve_name}_{measure}"
+                if fieldname not in fieldnames:
+                    fieldnames.append(fieldname)
+
+        sorted_rows = [all_rows[t] for t in sorted(all_rows.keys())]
 
         with open(filepath, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
+
+            # Write the measurements as the first row
+            measurements_row = {field: '' for field in fieldnames}
+            for curve_name, values in measurements.items():
+                measurements_row[f"{curve_name}_MoyenneAllValues"] = values['MoyenneAllValues']
+                measurements_row[f"{curve_name}_MoyennePicMax"] = values['MoyennePicMax']
+                measurements_row[f"{curve_name}_MoyennePicMin"] = values['MoyennePicMin']
+            writer.writerow(measurements_row)
+
+            # Write the rest of the rows
             writer.writerows(sorted_rows)
-            measurement_row = {'Time': 'Measurements'}
-            for curve_name, measurement in measurements.items():
-                measurement_row[f"{curve_name}_MoyenneAllValues"] = measurement['MoyenneAllValues']
-                measurement_row[f"{curve_name}_MoyennePicMax"] = measurement['MoyennePicMax']
-                measurement_row[f"{curve_name}_MoyennePicMin"] = measurement['MoyennePicMin']
-            writer.writerow(measurement_row)
 
     def add_point_on_click(self, plot_item, event):
         pos = event.scenePos()
