@@ -10,6 +10,9 @@ import threading
 import time
 from pydub import AudioSegment
 from pydub.playback import play
+
+from PyQt5.QtCore import pyqtSignal
+
 from PyQt5.QtWidgets import QCheckBox, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
 from scipy.io import wavfile
 from scipy.interpolate import Akima1DInterpolator
@@ -23,6 +26,137 @@ from calc import calc_formants, MinMaxFinder, read_AG50x, calculate_amplitude_en
 from ui import create_plot_widget, SelectableListDialog, Crosshair, MinMaxAnalyser
 
 pg.setConfigOptions(foreground="black", background="w")
+
+class ColorButton(QPushButton):
+    color: str
+    color_chosen = pyqtSignal(str)
+
+    def __init__(self, color: str) -> None:
+        super().__init__()
+        self.color = color
+
+        self.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
+        self.setFixedSize(20, 20)
+        self.clicked.connect(self.emit_color)
+
+    def emit_color(self) -> None:
+        self.color_chosen.emit(self.color)
+
+class ColorSelection(QWidget):
+    color_chosen = pyqtSignal(str)
+
+    def __init__(self, colors: tuple[str] | None = None) -> None:
+        super().__init__()
+        if colors is None:
+            colors = ("brown", "red", "green", "blue", "orange", "purple",
+                           "pink", "black")
+
+        layout = QHBoxLayout()
+
+        for color in colors:
+            btn = ColorButton(color)
+            btn.clicked.connect(self.color_chosen.emit)
+            layout.addWidget(btn)
+
+        self.setLayout(layout)
+
+
+class Dashboard(QTableWidget):
+    update_panel = pyqtSignal(int, int)
+    toggle_visibility = pyqtSignal(int, int)
+    change_curve_color = pyqtSignal(int, str)
+    clear_curve = pyqtSignal(int)
+    update_derived = pyqtSignal(int, int)
+
+    row_count: int
+
+    def __init__(self) -> None:
+        super().__init__(0, 7)
+        self.__init_header__()
+
+        self.row_count = 0
+
+        for _ in range(4):
+            self.append_row()
+
+    def __init_header__(self) -> None:
+        self.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Visibility", "Clear", "Dérivée"])
+        header = self.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+
+        for section in [3, 4, 6]:
+            header.setSectionResizeMode(section, QHeaderView.Fixed)
+            header.resizeSection(section, 10)  
+
+        header.resizeSection(6, 80) 
+
+    def reset(self) -> None:
+        self.clearContents()
+        self.setRowCount(0)
+
+        self.row_count = 0
+        for _ in range(4):
+            self.append_row()
+
+    def append_row(self) -> None:
+        self.add_row(self.row_count)
+        self.row_count += 1
+
+    def add_row(self, row: int) -> None:
+        self.insertRow(self.row_count)
+        combo_box = QComboBox()
+        combo_box.addItems(["Choose", "Modulation cepstrale", "Formant 1", "Formant 2", "Formant 3", "Courbes ema", "Amplitude Envelope"])
+        combo_box.currentIndexChanged.connect(
+            lambda index, row=row:
+                self.update_panel.emit(row, index)
+        )
+
+        self.setCellWidget(row, 0, combo_box)
+
+        for col in range(1, 2):
+            button = QPushButton(f"Button {row+1},{col+1}")
+            button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
+            self.setCellWidget(row, col, button)
+
+        self.panel_choice = QComboBox()
+        self.panel_choice.addItems(["1", "2", "3", "4"])
+        self.setCellWidget(row, 3, self.panel_choice)
+        visibility_checkbox = QCheckBox()
+        visibility_checkbox.setChecked(True)
+
+        visibility_checkbox.stateChanged.connect(
+            lambda state, row=row: 
+                self.toggle_visibility.emit(row, state)
+        )
+        self.setCellWidget(row, 4, visibility_checkbox)
+
+        color_selection = ColorSelection()
+        color_selection.color_chosen.connect(
+            lambda color, row=row: 
+                self.change_curve_color.emit(row, color)
+        )
+
+        self.setCellWidget(row, 2, color_selection)
+        clear_button = QPushButton("Clear")
+        clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
+
+        clear_button.clicked.connect(
+            lambda _, row=row:
+                self.clear_curve.emit(row)
+        )
+
+        derived_combo_box = QComboBox()  
+        derived_combo_box.addItems(["Original", "Dérivée"])
+        derived_combo_box.currentIndexChanged.connect(
+            lambda index, row=row: 
+                self.update_derived.emit(row, index)
+        )
+        self.setCellWidget(row, 5, clear_button)
+        self.setCellWidget(row, 6, derived_combo_box)
+        
+    @property
+    def selected_panel(self) -> int:
+        return self.panel_choice.currentIndex()
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
@@ -86,59 +220,22 @@ class AudioAnalyzer(QMainWindow):
         self.selected_region.setZValue(10)
         self.selected_region.hide()
         self.textgrid_visibility_checkboxes = {}
-        self.dashboard = QTableWidget(4, 7, self)  
-        self.dashboard.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Visibility", "Clear", "Dérivée"])
         main_layout.addLayout(left_layout, 2)  
         main_layout.addLayout(right_layout, 1)
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
-        header = self.dashboard.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.Fixed)
-        header.setSectionResizeMode(4, QHeaderView.Fixed)
-        header.setSectionResizeMode(6, QHeaderView.Fixed)
-        header.resizeSection(3, 10)  
-        header.resizeSection(4, 10)  
-        header.resizeSection(4, 10) 
-        header.resizeSection(6, 80) 
-        for row in range(4):
-            combo_box = QComboBox()
-            combo_box.addItems(["Choose", "Modulation cepstrale", "Formant 1", "Formant 2", "Formant 3", "Courbes ema", "Amplitude Envelope"])
-            combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_panel(row, index))
-            self.dashboard.setCellWidget(row, 0, combo_box)
-            for col in range(1, 2):
-                button = QPushButton(f"Button {row+1},{col+1}")
-                button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
-                self.dashboard.setCellWidget(row, col, button)
-            panel_combo_box = QComboBox()
-            panel_combo_box.addItems(["1", "2", "3", "4"])
-            self.dashboard.setCellWidget(row, 3, panel_combo_box)
-            visibility_checkbox = QCheckBox()
-            visibility_checkbox.setChecked(True)
-            visibility_checkbox.stateChanged.connect(lambda state, row=row: self.toggle_visibility(row, state))
-            self.dashboard.setCellWidget(row, 4, visibility_checkbox)
-            color_buttons_layout = QHBoxLayout()
-            color_names = ["brown", "red", "green", "blue", "orange", "purple", "pink", "black"]
-            for color in color_names:
-                color_button = QPushButton()
-                color_button.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
-                color_button.setFixedSize(20, 20)
-                color_button.clicked.connect(lambda _, row=row, color=color: self.change_curve_color(row, color))
-                color_buttons_layout.addWidget(color_button)
-            color_buttons_widget = QWidget()
-            color_buttons_widget.setLayout(color_buttons_layout)
-            self.dashboard.setCellWidget(row, 2, color_buttons_widget)
-            clear_button = QPushButton("Clear")
-            clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
-            clear_button.clicked.connect(lambda _, row=row: self.clear_curve(row))
-            self.dashboard.setCellWidget(row, 5, clear_button)
-            derived_combo_box = QComboBox()  
-            derived_combo_box.addItems(["Original", "Dérivée"])
-            derived_combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_derived(row, index))
-            self.dashboard.setCellWidget(row, 6, derived_combo_box) 
+
+        self.dashboard = Dashboard()
+        self.dashboard.update_panel.connect(self.update_panel)
+        self.dashboard.toggle_visibility.connect(self.toggle_visibility)
+        self.dashboard.change_curve_color.connect(self.change_curve_color)
+        self.dashboard.clear_curve.connect(self.clear_curve)
+        self.dashboard.update_derived.connect(self.update_derived)
+
         self.add_row_button = QPushButton("+")
         self.add_row_button.setStyleSheet("QPushButton { background-color: lightgreen; border: 1px solid black; padding: 5px; }")
-        self.add_row_button.clicked.connect(self.add_dashboard_row)
+        self.add_row_button.clicked.connect(self.dashboard.append_row)
+
         right_layout.addWidget(self.dashboard)
         right_layout.setAlignment(Qt.AlignCenter)
         right_layout.addWidget(self.add_row_button)
@@ -292,47 +389,8 @@ class AudioAnalyzer(QMainWindow):
         x, y = mouse_point.x(), mouse_point.y()
         # print(f"Clicked on panel {panel_index + 1} at x: {x}, y: {y}")
 
-    def add_dashboard_row(self):
-        row = self.dashboard.rowCount()
-        self.dashboard.insertRow(row)
-        combo_box = QComboBox()
-        combo_box.addItems(["Choose", "Modulation cepstrale", "Formant 1", "Formant 2", "Formant 3", "Courbes ema", "Amplitude Envelope"])
-        combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_panel(row, index))
-        self.dashboard.setCellWidget(row, 0, combo_box)
-        button = QPushButton(f"Button {row+1},1")
-        button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
-        self.dashboard.setCellWidget(row, 1, button)
-        panel_combo_box = QComboBox()
-        panel_combo_box.addItems(["1", "2", "3", "4"])
-        self.dashboard.setCellWidget(row, 3, panel_combo_box)
-        visibility_checkbox = QCheckBox()
-        visibility_checkbox.setChecked(True)
-        visibility_checkbox.stateChanged.connect(lambda state, row=row: self.toggle_visibility(row, state))
-        self.dashboard.setCellWidget(row, 4, visibility_checkbox)
-        color_buttons_layout = QHBoxLayout()
-        color_names = ["brown", "red", "green", "blue", "orange", "purple", "pink", "black"]
-        for color in color_names:
-            color_button = QPushButton()
-            color_button.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
-            color_button.setFixedSize(20, 20)
-            color_button.clicked.connect(lambda _, row=row, color=color: self.change_curve_color(row, color))
-            color_buttons_layout.addWidget(color_button)
-        color_buttons_widget = QWidget()
-        color_buttons_widget.setLayout(color_buttons_layout)
-        self.dashboard.setCellWidget(row, 2, color_buttons_widget)
-        clear_button = QPushButton("Clear")
-        clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
-        clear_button.clicked.connect(lambda _, row=row: self.clear_curve(row))
-        self.dashboard.setCellWidget(row, 5, clear_button)
-        derived_combo_box = QComboBox() 
-        derived_combo_box.addItems(["Original", "Dérivée"])
-        derived_combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_derived(row, index))
-        self.dashboard.setCellWidget(row, 6, derived_combo_box) 
-
     def clear_curve(self, row):
-        panel_combo_box = self.dashboard.cellWidget(row, 3)
-        selected_panel = int(panel_combo_box.currentText()) - 1
-        panel = self.panels[selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
@@ -381,9 +439,7 @@ class AudioAnalyzer(QMainWindow):
         print("Selected region from", region[0], "to", region[1])
     
     def update_panel(self, row, index):
-        panel_combo_box = self.dashboard.cellWidget(row, 3)
-        selected_panel = int(panel_combo_box.currentText()) - 1
-        panel = self.panels[selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for old_item in panel.plot_items[row]:
@@ -526,9 +582,8 @@ class AudioAnalyzer(QMainWindow):
         self.crosshair.add_panel_plot(panel)
 
     def toggle_visibility(self, row, state):
-        panel_combo_box = self.dashboard.cellWidget(row, 3)
-        selected_panel = int(panel_combo_box.currentText()) - 1
-        panel = self.panels[selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel][1]
+
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
                 if state == Qt.Checked:
@@ -545,6 +600,7 @@ class AudioAnalyzer(QMainWindow):
                         plot_item.min_points.show()
                     else:
                         plot_item.min_points.hide()
+
     def compute_max(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
@@ -612,9 +668,8 @@ class AudioAnalyzer(QMainWindow):
                 item.min_points = min_points 
 
     def change_curve_color(self, row, color):
-        panel_combo_box = self.dashboard.cellWidget(row, 3)
-        selected_panel = int(panel_combo_box.currentText()) - 1
-        panel = self.panels[selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel][1]
+
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
                 plot_item.setPen(pg.mkPen(color=color, width=2))
@@ -997,9 +1052,7 @@ class AudioAnalyzer(QMainWindow):
             self.restore_y_ranges(panel)
 
     def update_derived(self, row, index):
-        panel_combo_box = self.dashboard.cellWidget(row, 3)
-        selected_panel = int(panel_combo_box.currentText()) - 1
-        panel = self.panels[selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
@@ -1140,7 +1193,7 @@ class AudioAnalyzer(QMainWindow):
         self.file_path = ""
         self.spectrogram_loaded = False
         self.selected_region.hide()
-        self.reset_dashboard()
+        self.dashboard.reset()
         self.clear_panels()
         self.clear_audio()        
         if self.textgrid:
@@ -1170,46 +1223,7 @@ class AudioAnalyzer(QMainWindow):
                     if hasattr(item, 'min_points'):
                         item.min_points.clear()
                 del plot_widget.plot_items
-    def reset_dashboard(self):
-        self.dashboard.clearContents()
-        self.dashboard.setRowCount(4)
-        for row in range(4):
-            combo_box = QComboBox()
-            combo_box.addItems(["Choose", "Modulation cepstrale", "Formant 1", "Formant 2", "Formant 3", "Courbes ema", "Amplitude Envelope"])
-            combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_panel(row, index))
-            self.dashboard.setCellWidget(row, 0, combo_box)
-            for col in range(1, 2):
-                button = QPushButton(f"Button {row+1},{col+1}")
-                button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
-                self.dashboard.setCellWidget(row, col, button)
-            panel_combo_box = QComboBox()
-            panel_combo_box.addItems(["1", "2", "3", "4"])
-            self.dashboard.setCellWidget(row, 3, panel_combo_box)
-            visibility_checkbox = QCheckBox()
-            visibility_checkbox.setChecked(True)
-            visibility_checkbox.stateChanged.connect(lambda state, row=row: self.toggle_visibility(row, state))
-            self.dashboard.setCellWidget(row, 4, visibility_checkbox)
-            color_buttons_layout = QHBoxLayout()
-            color_names = ["brown", "red", "green", "blue", "orange", "purple", "pink", "black"]
-            for color in color_names:
-                color_button = QPushButton()
-                color_button.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
-                color_button.setFixedSize(20, 20)
-                color_button.clicked.connect(lambda _, row=row, color=color: self.change_curve_color(row, color))
-                color_buttons_layout.addWidget(color_button)
-            color_buttons_widget = QWidget()
-            color_buttons_widget.setLayout(color_buttons_layout)
-            self.dashboard.setCellWidget(row, 2, color_buttons_widget)
-            clear_button = QPushButton("Clear")
-            clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
-            clear_button.clicked.connect(lambda _, row=row: self.clear_curve(row))
-            self.dashboard.setCellWidget(row, 5, clear_button)
-            derived_combo_box = QComboBox() 
-            derived_combo_box.addItems(["Original", "Dérivée"])
-            derived_combo_box.currentIndexChanged.connect(lambda index, row=row: self.update_derived(row, index))
-            self.dashboard.setCellWidget(row, 6, derived_combo_box) 
 
-        
     def clear_panels(self):
         for panel, plot_widget in self.panels:
             plot_widget.clear()
@@ -1262,7 +1276,7 @@ class AudioAnalyzer(QMainWindow):
             self.real_time_plot.setParent(None)
             self.real_time_plot = None
 
-        self.reset_dashboard()
+        self.dashboard.reset()
         self.selected_region.hide()
         self.selected_region.setRegion([0, 0])
         if self.textgrid:
