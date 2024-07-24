@@ -12,7 +12,7 @@ from pydub import AudioSegment
 from pydub.playback import play
 
 from PyQt5.QtCore import pyqtSignal
-
+from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QCheckBox, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
 from scipy.io import wavfile
 from scipy.interpolate import Akima1DInterpolator
@@ -247,13 +247,16 @@ class AudioAnalyzer(QMainWindow):
         self.textgrid_status_label = QLabel("No TextGrid loaded")
         self.textgrid_status_label.setStyleSheet("font-size: 16px; color: red;")
         textgrid_controls_layout.addWidget(self.textgrid_status_label)
-        self.display_textgrid_checkbox = QCheckBox("Afficher TextGrid")
-        self.display_textgrid_checkbox.setChecked(False)
-        self.display_textgrid_checkbox.stateChanged.connect(self.toggle_textgrid_display)
-        self.display_textgrid_checkbox.setEnabled(True)
-        textgrid_controls_layout.addWidget(self.display_textgrid_checkbox)
+
+
         self.textgrid_controls_group_box.setLayout(textgrid_controls_layout)
         right_layout.addWidget(self.textgrid_controls_group_box)
+
+        self.textgrid_table = QTableWidget(0, 2)
+        self.textgrid_table.setHorizontalHeaderLabels(["Tier", "Show"])
+        self.textgrid_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        right_layout.addWidget(self.textgrid_table)
+
 
         self.zoom_toolbar = QToolBar(self)
         self.zoom_toolbar.setStyleSheet("background-color: lightgray;")
@@ -319,6 +322,7 @@ class AudioAnalyzer(QMainWindow):
         self.record_button = QPushButton("Record Audio")
         self.record_button.setStyleSheet("QPushButton { background-color: lightgreen; border: 1px solid black; padding: 5px; }")
         self.record_button.clicked.connect(self.toggle_recording)
+        self.textgrid_annotations = []
 
     def init_real_time_plot(self):
         if not hasattr(self, 'real_time_plot') or self.real_time_plot is None:
@@ -832,24 +836,91 @@ class AudioAnalyzer(QMainWindow):
     def load_annotations(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)")
         if not filepath:
-            self.textgrid_path = None 
-            return self.textgrid_path
-        self.textgrid_path = filepath 
+            self.textgrid_path = None
+            return
+        self.textgrid_path = filepath
         tgt_textgrid = tgt.io.read_textgrid(filepath)
         self.textgrid = ui_tgt.TextgridTGTConvert().from_textgrid(tgt_textgrid, self.a.plot_widget)
-        for tier in self.textgrid.get_tiers():
-            self.crosshair.add_display_plot(tier)
-        self.curve_layout.addWidget(self.textgrid)
-        self.textgrid.setMaximumHeight(100) 
+        
+        self.clear_textgrid_annotations()
+        
+        self.populate_textgrid_table(tgt_textgrid)
+        
+        self.display_annotations(tgt_textgrid.get_tier_names()[0])
+        
         self.textgrid_status_label.setText(f"Loaded TextGrid: {os.path.basename(filepath)}")
         self.textgrid_status_label.setStyleSheet("font-size: 16px; color: green;")
         self.display_textgrid_checkbox.setEnabled(True)
 
+    def populate_textgrid_table(self, tgt_textgrid):
+        self.textgrid_table.setRowCount(0)
+        for tier_name in tgt_textgrid.get_tier_names():
+            row_position = self.textgrid_table.rowCount()
+            self.textgrid_table.insertRow(row_position)
+            self.textgrid_table.setItem(row_position, 0, QTableWidgetItem(tier_name))
+            
+            checkbox = QCheckBox()
+            checkbox.setChecked(False)
+            checkbox.stateChanged.connect(lambda state, tier=tier_name: self.toggle_tier_display(tier, state))
+            self.textgrid_table.setCellWidget(row_position, 1, checkbox)
+
+    def toggle_tier_display(self, tier_name, state):
+        if state == Qt.Checked:
+            self.display_annotations(tier_name)
+        else:
+            self.clear_annotations(tier_name)
+
+    def change_tier_display(self, old_tier, new_tier):
+        self.clear_annotations(old_tier)
+        self.display_annotations(new_tier)
+
+    def display_annotations(self, tier_name):
+        tgt_textgrid = tgt.io.read_textgrid(self.textgrid_path)
+        tier = tgt_textgrid.get_tier_by_name(tier_name)
+        
+        for interval in tier:
+            start_time = interval.start_time
+            end_time = interval.end_time
+            text = interval.text
+            
+            start_line = pg.InfiniteLine(pos=start_time, angle=90, pen=pg.mkPen('m', style=Qt.DashLine, width=2))
+            end_line = pg.InfiniteLine(pos=end_time, angle=90, pen=pg.mkPen('m', style=Qt.DashLine, width=2))
+            self.audio_widget.addItem(start_line)
+            self.audio_widget.addItem(end_line)
+            
+            mid_time = (start_time + end_time) / 2
+            text_item = pg.TextItem(text, anchor=(0.5, 0.5), color='r', border=pg.mkPen('m', width=1))
+            text_item.setPos(mid_time, np.max(self.audio_widget.getPlotItem().listDataItems()[0].yData) * 0.9)
+            text_item.setFont(QFont("Arial", 12, QFont.Bold))
+            self.audio_widget.addItem(text_item)
+            
+            self.textgrid_annotations.append((tier_name, start_line, end_line, text_item))
+
+    def clear_annotations(self, tier_name):
+        items_to_remove = [item for item in self.textgrid_annotations if item[0] == tier_name]
+        for item in items_to_remove:
+            self.audio_widget.removeItem(item[1])
+            self.audio_widget.removeItem(item[2])
+            self.audio_widget.removeItem(item[3])
+            self.textgrid_annotations.remove(item)
+        
+    def clear_textgrid_annotations(self):
+        for item in self.textgrid_annotations:
+            self.audio_widget.removeItem(item[1])
+            self.audio_widget.removeItem(item[2])
+            self.audio_widget.removeItem(item[3])
+        self.textgrid_annotations = []
+
     def toggle_textgrid_display(self, state):
         if state == Qt.Checked:
-            self.textgrid.show()
+            for row in range(self.textgrid_table.rowCount()):
+                tier_name = self.textgrid_table.item(row, 0).text()
+                if self.textgrid_table.cellWidget(row, 1).isChecked():
+                    self.display_annotations(tier_name)
         else:
-            self.textgrid.hide()
+            self.clear_textgrid_annotations()
+
+
     def export_to_csv(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
@@ -942,7 +1013,6 @@ class AudioAnalyzer(QMainWindow):
             for t in time_axis:
                 all_rows[t]["TextGrid Interval"] = textgrid_intervals.get(t, "")
 
-        # Ensure all fields from all rows and measurements are in fieldnames
         for row in all_rows.values():
             for key in row.keys():
                 if key not in fieldnames:
@@ -959,8 +1029,6 @@ class AudioAnalyzer(QMainWindow):
         with open(filepath, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-
-            # Write the measurements as the first row
             measurements_row = {field: '' for field in fieldnames}
             for curve_name, values in measurements.items():
                 measurements_row[f"{curve_name}_MoyenneAllValues"] = values['MoyenneAllValues']
@@ -968,7 +1036,6 @@ class AudioAnalyzer(QMainWindow):
                 measurements_row[f"{curve_name}_MoyennePicMin"] = values['MoyennePicMin']
             writer.writerow(measurements_row)
 
-            # Write the rest of the rows
             writer.writerows(sorted_rows)
 
     def add_point_on_click(self, plot_item, event):
