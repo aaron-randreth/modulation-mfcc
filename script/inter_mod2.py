@@ -1,6 +1,8 @@
 import sys
 import os
 import numpy as np
+from typing import override
+
 import csv
 import sounddevice as sd
 import wave
@@ -12,7 +14,7 @@ from pydub import AudioSegment
 from pydub.playback import play
 
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QMouseEvent
 from PyQt5.QtWidgets import QCheckBox, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
 from scipy.io import wavfile
 from scipy.interpolate import Akima1DInterpolator
@@ -28,22 +30,30 @@ from ui import create_plot_widget, SelectableListDialog, Crosshair, MinMaxAnalys
 pg.setConfigOptions(foreground="black", background="w")
 
 class ColorButton(QPushButton):
+    color_chosen = pyqtSignal()
     color: str
-    color_chosen = pyqtSignal(str)
 
     def __init__(self, color: str) -> None:
         super().__init__()
         self.color = color
+        self.reset_style()
 
-        self.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
         self.setFixedSize(20, 20)
-        self.clicked.connect(self.emit_color)
 
-    def emit_color(self) -> None:
-        self.color_chosen.emit(self.color)
+    @override
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        self.color_chosen.emit()
+        super().mousePressEvent(event)
+
+    def reset_style(self) -> None:
+        self.setStyleSheet(f"background-color: {self.color}; border: 1px solid black;")
+
+    def set_focus(self) -> None:
+        self.setStyleSheet(f"background-color: {self.color}; border: 3px solid black;")
 
 class ColorSelection(QWidget):
     color_chosen = pyqtSignal(str)
+    buttons: list[ColorButton]
 
     def __init__(self, colors: tuple[str] | None = None) -> None:
         super().__init__()
@@ -51,15 +61,25 @@ class ColorSelection(QWidget):
             colors = ("brown", "red", "green", "blue", "orange", "purple",
                            "pink", "black")
 
+        self.buttons = []
         layout = QHBoxLayout()
 
-        for color in colors:
+        for i, color in enumerate(colors):
             btn = ColorButton(color)
-            btn.clicked.connect(self.color_chosen.emit)
+            btn.color_chosen.connect(lambda i=i: self.choose_color(i))
+
             layout.addWidget(btn)
+            self.buttons.append(btn)
 
         self.setLayout(layout)
 
+    def choose_color(self, btn_idx: int) -> None:
+        for b in self.buttons:
+            b.reset_style()
+
+        btn = self.buttons[btn_idx]
+        btn.set_focus()
+        self.color_chosen.emit(btn.color)
 
 class Dashboard(QTableWidget):
     update_panel = pyqtSignal(int, int)
@@ -677,10 +697,6 @@ class AudioAnalyzer(QMainWindow):
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
                 plot_item.setPen(pg.mkPen(color=color, width=2))
-        color_widget = self.dashboard.cellWidget(row, 2)
-        for i in range(color_widget.layout().count()):
-            button = color_widget.layout().itemAt(i).widget()
-            button.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
 
     def create_load_buttons(self):
         load_group_box = QGroupBox("Load Audio and TextGrid Controls")
