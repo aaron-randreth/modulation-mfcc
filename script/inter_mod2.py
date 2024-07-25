@@ -163,12 +163,14 @@ class Dashboard(QTableWidget):
     update_derived = pyqtSignal(int, int)
 
     row_count: int
+    panel_choices: list[QComboBox]
 
     def __init__(self) -> None:
         super().__init__(0, 7)
         self.__init_header__()
 
         self.row_count = 0
+        self.panel_choices = []
 
         for _ in range(4):
             self.append_row()
@@ -189,6 +191,7 @@ class Dashboard(QTableWidget):
             self.removeRow(row_id)
 
         self.row_count = 0
+        self.panel_choices = []
         for _ in range(4):
             self.append_row()
 
@@ -212,12 +215,14 @@ class Dashboard(QTableWidget):
             button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
             self.setCellWidget(row, col, button)
 
-        self.panel_choice = QComboBox()
-        self.panel_choice.addItems(["1", "2", "3", "4"])
-        self.setCellWidget(row, 3, self.panel_choice)
+        panel_choice = QComboBox()
+        panel_choice.addItems(["1", "2", "3", "4"])
+        self.setCellWidget(row, 3, panel_choice)
+        self.panel_choices.append(panel_choice)
+        print(self.panel_choices)
+
         visibility_checkbox = QCheckBox()
         visibility_checkbox.setChecked(True)
-
         visibility_checkbox.stateChanged.connect(
             lambda state, row=row: 
                 self.toggle_visibility.emit(row, state)
@@ -248,9 +253,10 @@ class Dashboard(QTableWidget):
         self.setCellWidget(row, 5, clear_button)
         self.setCellWidget(row, 6, derived_combo_box)
         
-    @property
-    def selected_panel(self) -> int:
-        return self.panel_choice.currentIndex()
+    def selected_panel(self, row_idx: int) -> int:
+        if row_idx < 0 or row_idx >= self.row_count:
+            raise ValueError(f"Incorrect row id given {row_idx}")
+        return self.panel_choices[row_idx].currentIndex()
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
@@ -488,7 +494,7 @@ class AudioAnalyzer(QMainWindow):
         # print(f"Clicked on panel {panel_index + 1} at x: {x}, y: {y}")
 
     def clear_curve(self, row):
-        panel = self.panels[self.dashboard.selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel(row)][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
@@ -537,7 +543,7 @@ class AudioAnalyzer(QMainWindow):
         print("Selected region from", region[0], "to", region[1])
     
     def update_panel(self, row, index):
-        panel = self.panels[self.dashboard.selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel(row)][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for old_item in panel.plot_items[row]:
@@ -680,7 +686,7 @@ class AudioAnalyzer(QMainWindow):
         self.crosshair.add_panel_plot(panel)
 
     def toggle_visibility(self, row, state):
-        panel = self.panels[self.dashboard.selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel(row)][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
@@ -766,7 +772,7 @@ class AudioAnalyzer(QMainWindow):
                 item.min_points = min_points 
 
     def change_curve_color(self, row, color):
-        panel = self.panels[self.dashboard.selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel(row)][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
@@ -1204,7 +1210,7 @@ class AudioAnalyzer(QMainWindow):
             self.restore_y_ranges(panel)
 
     def update_derived(self, row, index):
-        panel = self.panels[self.dashboard.selected_panel][1]
+        panel = self.panels[self.dashboard.selected_panel(row)][1]
 
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
