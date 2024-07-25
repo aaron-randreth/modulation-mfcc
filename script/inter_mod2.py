@@ -28,6 +28,80 @@ from calc import calc_formants, MinMaxFinder, read_AG50x, calculate_amplitude_en
 from ui import create_plot_widget, SelectableListDialog, Crosshair, MinMaxAnalyser
 
 pg.setConfigOptions(foreground="black", background="w")
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel, QPushButton
+
+class ExportOptionsDialog(QDialog):
+    def __init__(self, parent, curves, textgrid_intervals):
+        super().__init__(parent)
+        self.setWindowTitle("Export Options")
+        self.curves = curves
+        self.textgrid_intervals = textgrid_intervals
+
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        self.checkboxes = {}
+
+        for curve_name in self.curves:
+            curve_layout = QVBoxLayout()
+            curve_label = QLabel(curve_name)
+            curve_layout.addWidget(curve_label)
+
+            y_values_checkbox = QCheckBox("All Y values")
+            max_peaks_checkbox = QCheckBox("Max peaks")
+            min_peaks_checkbox = QCheckBox("Min peaks")
+
+            curve_layout.addWidget(y_values_checkbox)
+            curve_layout.addWidget(max_peaks_checkbox)
+            curve_layout.addWidget(min_peaks_checkbox)
+
+            self.checkboxes[curve_name] = {
+                'y_values': y_values_checkbox,
+                'max_peaks': max_peaks_checkbox,
+                'min_peaks': min_peaks_checkbox
+            }
+
+            layout.addLayout(curve_layout)
+
+        self.textgrid_checkboxes = {}
+
+        if self.textgrid_intervals:
+            textgrid_label = QLabel("TextGrid Intervals")
+            layout.addWidget(textgrid_label)
+
+            for interval_name in self.textgrid_intervals:
+                textgrid_checkbox = QCheckBox(interval_name)
+                layout.addWidget(textgrid_checkbox)
+                self.textgrid_checkboxes[interval_name] = textgrid_checkbox
+
+        button_layout = QHBoxLayout()
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
+
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+    def get_selections(self):
+        selections = {}
+        for curve_name, checkboxes in self.checkboxes.items():
+            selections[curve_name] = {
+                'y_values': checkboxes['y_values'].isChecked(),
+                'max_peaks': checkboxes['max_peaks'].isChecked(),
+                'min_peaks': checkboxes['min_peaks'].isChecked()
+            }
+
+        textgrid_selections = [interval for interval, checkbox in self.textgrid_checkboxes.items() if checkbox.isChecked()]
+
+        return selections, textgrid_selections
+
 
 class ColorButton(QPushButton):
     color_chosen = pyqtSignal()
@@ -100,7 +174,7 @@ class Dashboard(QTableWidget):
             self.append_row()
 
     def __init_header__(self) -> None:
-        self.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Visibility", "Clear", "Dérivée"])
+        self.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Show", "Clear", "Dérivée"])
         header = self.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
 
@@ -944,6 +1018,18 @@ class AudioAnalyzer(QMainWindow):
         if not hasattr(panel, 'plot_items'):
             return
 
+        textgrid_intervals = []
+        if self.textgrid_path:
+            textgrid = tgt.io.read_textgrid(self.textgrid_path)
+            textgrid_intervals = textgrid.get_tier_names()
+
+        curves = [self.dashboard.cellWidget(row, 0).currentText() for row in panel.plot_items.keys()]
+        dialog = ExportOptionsDialog(self, curves, textgrid_intervals)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        selections, textgrid_selections = dialog.get_selections()
+
         filepath, _ = QFileDialog.getSaveFileName(self, "Save CSV File", "", "CSV Files (*.csv)")
         if not filepath:
             return
@@ -951,11 +1037,11 @@ class AudioAnalyzer(QMainWindow):
         min_time = float('inf')
         max_time = float('-inf')
         for plot_items in panel.plot_items.values():
-            for curve in plot_items:
-                if isinstance(curve, pg.PlotDataItem):
-                    x_data = curve.xData
-                elif isinstance(curve, pg.ScatterPlotItem):
-                    spots = curve.points()
+            for item in plot_items:
+                if isinstance(item, pg.PlotDataItem):
+                    x_data = item.xData
+                elif isinstance(item, pg.ScatterPlotItem):
+                    spots = item.points()
                     x_data = np.array([spot.pos()[0] for spot in spots])
                     y_data = np.array([spot.pos()[1] for spot in spots])
                 else:
@@ -965,94 +1051,77 @@ class AudioAnalyzer(QMainWindow):
 
         time_axis = np.arange(min_time, max_time, 0.005)
 
-        fieldnames = ['Time', 'TextGrid Interval']
-        measurements = {}
+        fieldnames = ['Time']
         all_rows = {t: {'Time': t} for t in time_axis}
 
-        textgrid_intervals = {}
-        if self.textgrid_path:
-            textgrid = tgt.io.read_textgrid(self.textgrid_path)
-            if textgrid.get_tier_names():
-                first_tier = textgrid.get_tier_by_name(textgrid.get_tier_names()[0])
-                for interval in first_tier:
-                    start_time = interval.start_time
-                    end_time = interval.end_time
-                    label = interval.text
-                    for t in time_axis:
-                        if start_time <= t <= end_time:
-                            if t not in textgrid_intervals:
-                                textgrid_intervals[t] = label
-
-        for row in panel.plot_items.keys():
+        for row, plot_items in panel.plot_items.items():
             combo_box = self.dashboard.cellWidget(row, 0)
             curve_name = combo_box.currentText()
-            derived_combo_box = self.dashboard.cellWidget(row, 6)
-            is_derived = derived_combo_box.currentIndex() == 1
-            fieldnames.extend([
-                f"{curve_name} X Values", f"{curve_name} Y Values", f"{curve_name} Derived"
-            ])
 
-            for curve in panel.plot_items[row]:
-                if isinstance(curve, pg.PlotDataItem):
-                    x_data, y_data = curve.xData, curve.yData
-                elif isinstance(curve, pg.ScatterPlotItem):
-                    spots = curve.points()
+            for item in plot_items:
+                if isinstance(item, pg.PlotDataItem):
+                    x_data, y_data = item.xData, item.yData
+                elif isinstance(item, pg.ScatterPlotItem):
+                    spots = item.points()
                     x_data = np.array([spot.pos()[0] for spot in spots])
                     y_data = np.array([spot.pos()[1] for spot in spots])
                 else:
                     continue
 
-                interpolator = Akima1DInterpolator(x_data, y_data)
-                y_interpolated = interpolator(time_axis)
-                interval = self.get_selected_region_interval()
-                min_finder = MinMaxFinder()
-                max_finder = MinMaxFinder()
-                x_min, y_min = min_finder.analyse_minimum(x_data, y_data, interval)
-                x_max, y_max = max_finder.analyse_maximum(x_data, y_data, interval)
-                interval_times, interval_values = min_finder.find_in_interval(x_data, y_data, interval)
-                avg_min_peaks = np.mean(y_min) if len(y_min) > 0 else None
-                avg_max_peaks = np.mean(y_max) if len(y_max) > 0 else None
-                avg_all_values = np.mean(interval_values) if len(interval_values) > 0 else None
+                if selections[curve_name]['y_values']:
+                    interpolator = Akima1DInterpolator(x_data, y_data)
+                    y_interpolated = interpolator(time_axis)
+                    for t, y_val in zip(time_axis, y_interpolated):
+                        all_rows[t][f"{curve_name} Y Values"] = y_val
 
-                measurements[curve_name] = {
-                    'MoyenneAllValues': avg_all_values,
-                    'MoyennePicMax': avg_max_peaks,
-                    'MoyennePicMin': avg_min_peaks
-                }
+                if selections[curve_name]['max_peaks']:
+                    max_finder = MinMaxFinder()
+                    x_max, y_max = max_finder.analyse_maximum(x_data, y_data, self.get_selected_region_interval())
+                    for x_val, y_val in zip(x_max, y_max):
+                        if x_val in all_rows:
+                            all_rows[x_val][f"{curve_name} Max Peaks"] = y_val
+                        else:
+                            all_rows[x_val] = {'Time': x_val, f"{curve_name} Max Peaks": y_val}
 
-                for t, y_val in zip(time_axis, y_interpolated):
-                    all_rows[t][f"{curve_name} X Values"] = t
-                    all_rows[t][f"{curve_name} Y Values"] = y_val
-                    all_rows[t][f"{curve_name} Derived"] = "Yes" if is_derived else "No"
+                if selections[curve_name]['min_peaks']:
+                    min_finder = MinMaxFinder()
+                    x_min, y_min = min_finder.analyse_minimum(x_data, y_data, self.get_selected_region_interval())
+                    for x_val, y_val in zip(x_min, y_min):
+                        if x_val in all_rows:
+                            all_rows[x_val][f"{curve_name} Min Peaks"] = y_val
+                        else:
+                            all_rows[x_val] = {'Time': x_val, f"{curve_name} Min Peaks": y_val}
 
-        if textgrid_intervals:
-            for t in time_axis:
-                all_rows[t]["TextGrid Interval"] = textgrid_intervals.get(t, "")
+        fieldnames.extend([f"{curve_name} Y Values" for curve_name in selections.keys() if selections[curve_name]['y_values']])
+        fieldnames.extend([f"{curve_name} Max Peaks" for curve_name in selections.keys() if selections[curve_name]['max_peaks']])
+        fieldnames.extend([f"{curve_name} Min Peaks" for curve_name in selections.keys() if selections[curve_name]['min_peaks']])
 
-        for row in all_rows.values():
-            for key in row.keys():
-                if key not in fieldnames:
-                    fieldnames.append(key)
-
-        for curve_name, values in measurements.items():
-            for measure in ['MoyenneAllValues', 'MoyennePicMax', 'MoyennePicMin']:
-                fieldname = f"{curve_name}_{measure}"
-                if fieldname not in fieldnames:
-                    fieldnames.append(fieldname)
+        if textgrid_selections:
+            for interval_name in textgrid_selections:
+                fieldnames.append(f"TextGrid Interval: {interval_name}")
+                for t in time_axis:
+                    interval_text = self.get_textgrid_interval_text(t, interval_name)
+                    all_rows[t][f"TextGrid Interval: {interval_name}"] = interval_text
 
         sorted_rows = [all_rows[t] for t in sorted(all_rows.keys())]
 
         with open(filepath, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            measurements_row = {field: '' for field in fieldnames}
-            for curve_name, values in measurements.items():
-                measurements_row[f"{curve_name}_MoyenneAllValues"] = values['MoyenneAllValues']
-                measurements_row[f"{curve_name}_MoyennePicMax"] = values['MoyennePicMax']
-                measurements_row[f"{curve_name}_MoyennePicMin"] = values['MoyennePicMin']
-            writer.writerow(measurements_row)
-
             writer.writerows(sorted_rows)
+
+    def get_textgrid_interval_text(self, time, interval_name):
+        if not self.textgrid_path:
+            return ""
+
+        textgrid = tgt.io.read_textgrid(self.textgrid_path)
+        tier = textgrid.get_tier_by_name(interval_name)
+        for interval in tier:
+            if interval.start_time <= time <= interval.end_time:
+                return interval.text
+
+        return ""
+
 
     def add_point_on_click(self, plot_item, event):
         pos = event.scenePos()
