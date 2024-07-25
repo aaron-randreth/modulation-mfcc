@@ -185,8 +185,8 @@ class Dashboard(QTableWidget):
         header.resizeSection(6, 80) 
 
     def reset(self) -> None:
-        self.clearContents()
-        self.setRowCount(0)
+        for row_id in reversed(range(self.row_count)):
+            self.removeRow(row_id)
 
         self.row_count = 0
         for _ in range(4):
@@ -1345,7 +1345,6 @@ class AudioAnalyzer(QMainWindow):
         self.file_path = ""
         self.spectrogram_loaded = False
         self.selected_region.hide()
-        self.dashboard.reset()
         self.clear_panels()
         self.clear_audio()        
         if self.textgrid:
