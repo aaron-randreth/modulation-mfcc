@@ -2,6 +2,7 @@ import sys
 import os
 import numpy as np
 from typing import override
+from PyQt5.QtGui import QColor, QStandardItemModel, QStandardItem
 
 import csv
 import sounddevice as sd
@@ -155,6 +156,7 @@ class ColorSelection(QWidget):
         btn.set_focus()
         self.color_chosen.emit(btn.color)
 
+
 class Dashboard(QTableWidget):
     update_panel = pyqtSignal(int, int)
     toggle_visibility = pyqtSignal(int, int)
@@ -229,13 +231,38 @@ class Dashboard(QTableWidget):
         )
         self.setCellWidget(row, 4, visibility_checkbox)
 
-        color_selection = ColorSelection()
-        color_selection.color_chosen.connect(
-            lambda color, row=row: 
-                self.change_curve_color.emit(row, color)
+        color_combo = QComboBox()
+        colors = ["brown", "red", "green", "blue", "orange", "purple", "pink", "black"]
+        color_model = QStandardItemModel(color_combo)
+        for color in colors:
+            color_item = QStandardItem()
+            color_item.setBackground(QColor(color))
+            color_item.setText("")  
+            color_model.appendRow(color_item)
+        color_combo.setModel(color_model)
+        color_combo.setStyleSheet("""
+    QComboBox::item {
+        background: transparent;
+    }
+    QComboBox::item:selected {
+        background: transparent;
+    }
+
+    
+""")
+        color_label = QLabel()
+        color_label.setFixedSize(20, 20)
+        color_combo.currentIndexChanged.connect(
+            lambda index, row=row, label=color_label: self.change_color(colors[index], row, label)
         )
 
-        self.setCellWidget(row, 2, color_selection)
+        color_layout = QHBoxLayout()
+        color_layout.addWidget(color_combo)
+        color_layout.addWidget(color_label)
+        color_widget = QWidget()
+        color_widget.setLayout(color_layout)
+        self.setCellWidget(row, 2, color_widget)
+
         clear_button = QPushButton("Clear")
         clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
 
@@ -252,11 +279,16 @@ class Dashboard(QTableWidget):
         )
         self.setCellWidget(row, 5, clear_button)
         self.setCellWidget(row, 6, derived_combo_box)
+
         
     def selected_panel(self, row_idx: int) -> int:
         if row_idx < 0 or row_idx >= self.row_count:
             raise ValueError(f"Incorrect row id given {row_idx}")
         return self.panel_choices[row_idx].currentIndex()
+
+    def change_color(self, color, row, label):
+        label.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
+        self.change_curve_color.emit(row, color)
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
