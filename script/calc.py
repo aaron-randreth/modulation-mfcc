@@ -3,8 +3,8 @@ import numpy as np
 import xarray as xr
 import parselmouth
 from scipy.signal import butter, filtfilt
-
-def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float, energy_threshold: float = 40.0):
+from scipy.interpolate import interp1d
+def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float, energy_threshold: float = 20.0):
     formants = sound.to_formant_burg(time_step=0.005, max_number_of_formants=5, maximum_formant=5500, window_length=0.025, pre_emphasis_from=50)
     time_values = formants.ts()
     
@@ -29,6 +29,7 @@ def read_AG50x(path_to_pos_file):
         16: 112,
         32: 256
     }
+    target_sample_rate = 200  
     pos_file = open(path_to_pos_file, mode="rb")
     file_content = pos_file.read()
     pos_file.seek(0)
@@ -42,18 +43,29 @@ def read_AG50x(path_to_pos_file):
     data = np.frombuffer(data, np.float32)
     data = np.reshape(data, newshape=(-1, channel_sample_size[num_of_channels]))
     pos = data.reshape(len(data), -1, 7)
-    time = np.linspace(0, pos.shape[0] / ema_samplerate, pos.shape[0])
+    
+    original_time = np.linspace(0, len(pos) / ema_samplerate, len(pos))
+    
+    new_time = np.arange(0, original_time[-1], 1 / target_sample_rate)
+    
+    interpolated_pos = np.zeros((len(new_time), pos.shape[1], pos.shape[2]))
+    for i in range(pos.shape[1]): 
+        for j in range(pos.shape[2]):  
+            interp_func = interp1d(original_time, pos[:, i, j], kind='linear', fill_value="extrapolate")
+            interpolated_pos[:, i, j] = interp_func(new_time)
+    
     ema_data = xr.Dataset(
-        data_vars=dict(ema=(["time", "channels", "dimensions"], pos)),
+        data_vars=dict(ema=(["time", "channels", "dimensions"], interpolated_pos)),
         coords=dict(
-            time=(["time"], time),
+            time=(["time"], new_time),
             channels=(["channels"], np.arange(pos.shape[1])),
             dimensions=(["dimensions"], dims)
         ),
         attrs=dict(
             device="AG50x",
-            duration=time[-1],
-            samplerate=ema_samplerate
+            duration=new_time[-1],
+            original_samplerate=ema_samplerate,
+            resampled_samplerate=target_sample_rate
         )
     )
     return ema_data
@@ -81,10 +93,10 @@ def calculate_amplitude_envelope( signal, sample_rate, frame_size=1024):
         return np.array(envelope)
     signal = signal / np.max(np.abs(signal))
 
-    filtered_signal = bandpass_filter(signal, 300, 1300, sample_rate)
+    filtered_signal = bandpass_filter(signal, 700, 1300, sample_rate)
     abs_signal = np.abs(filtered_signal)
     abs_signal_mean_subtracted = abs_signal - np.mean(abs_signal)
-    final_signal = lowpass_filter(abs_signal_mean_subtracted, 10, sample_rate)
+    final_signal = lowpass_filter(abs_signal_mean_subtracted, 5, sample_rate)
 
     envelope = amplitude_envelope(final_signal, frame_size)
     return np.array(final_signal)
