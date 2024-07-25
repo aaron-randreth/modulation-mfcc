@@ -104,31 +104,10 @@ class ExportOptionsDialog(QDialog):
         return selections, textgrid_selections
 
 
-class ColorButton(QPushButton):
-    color_chosen = pyqtSignal()
-    color: str
-
-    def __init__(self, color: str) -> None:
-        super().__init__()
-        self.color = color
-        self.reset_style()
-
-        self.setFixedSize(20, 20)
-
-    @override
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        self.color_chosen.emit()
-        super().mousePressEvent(event)
-
-    def reset_style(self) -> None:
-        self.setStyleSheet(f"background-color: {self.color}; border: 1px solid black;")
-
-    def set_focus(self) -> None:
-        self.setStyleSheet(f"background-color: {self.color}; border: 3px solid black;")
-
 class ColorSelection(QWidget):
+
     color_chosen = pyqtSignal(str)
-    buttons: list[ColorButton]
+    colors : list[str]
 
     def __init__(self, colors: tuple[str] | None = None) -> None:
         super().__init__()
@@ -136,26 +115,45 @@ class ColorSelection(QWidget):
             colors = ("brown", "red", "green", "blue", "orange", "purple",
                            "pink", "black")
 
-        self.buttons = []
+        self.colors = colors
+
+        color_combo = self.create_color_combo()
+        self.color_indicator = QLabel()
+        self.color_indicator.setFixedSize(20, 20)
+        color_combo.currentIndexChanged.connect(self.choose_color)
+
         layout = QHBoxLayout()
-
-        for i, color in enumerate(colors):
-            btn = ColorButton(color)
-            btn.color_chosen.connect(lambda i=i: self.choose_color(i))
-
-            layout.addWidget(btn)
-            self.buttons.append(btn)
+        layout.addWidget(color_combo)
+        layout.addWidget(self.color_indicator)
 
         self.setLayout(layout)
 
-    def choose_color(self, btn_idx: int) -> None:
-        for b in self.buttons:
-            b.reset_style()
+    def create_color_combo(self) -> None:
+        color_combo = QComboBox()
+        color_model = QStandardItemModel(color_combo)
 
-        btn = self.buttons[btn_idx]
-        btn.set_focus()
-        self.color_chosen.emit(btn.color)
+        for color in self.colors:
+            color_item = QStandardItem()
+            color_item.setBackground(QColor(color))
+            color_item.setText("")
+            color_model.appendRow(color_item)
 
+        color_combo.setModel(color_model)
+        color_combo.setStyleSheet("""
+            QComboBox::item {
+                background: transparent;
+            }
+            QComboBox::item:selected {
+                background: transparent;
+            }
+            """)
+
+        return color_combo
+
+    def choose_color(self, color_idx: int) -> None:
+        color = self.colors[color_idx]
+        self.color_indicator.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
+        self.color_chosen.emit(color)
 
 class Dashboard(QTableWidget):
     update_panel = pyqtSignal(int, int)
@@ -221,7 +219,6 @@ class Dashboard(QTableWidget):
         panel_choice.addItems(["1", "2", "3", "4"])
         self.setCellWidget(row, 3, panel_choice)
         self.panel_choices.append(panel_choice)
-        print(self.panel_choices)
 
         visibility_checkbox = QCheckBox()
         visibility_checkbox.setChecked(True)
@@ -231,37 +228,11 @@ class Dashboard(QTableWidget):
         )
         self.setCellWidget(row, 4, visibility_checkbox)
 
-        color_combo = QComboBox()
-        colors = ["brown", "red", "green", "blue", "orange", "purple", "pink", "black"]
-        color_model = QStandardItemModel(color_combo)
-        for color in colors:
-            color_item = QStandardItem()
-            color_item.setBackground(QColor(color))
-            color_item.setText("")  
-            color_model.appendRow(color_item)
-        color_combo.setModel(color_model)
-        color_combo.setStyleSheet("""
-    QComboBox::item {
-        background: transparent;
-    }
-    QComboBox::item:selected {
-        background: transparent;
-    }
-
-    
-""")
-        color_label = QLabel()
-        color_label.setFixedSize(20, 20)
-        color_combo.currentIndexChanged.connect(
-            lambda index, row=row, label=color_label: self.change_color(colors[index], row, label)
+        color_selection = ColorSelection()
+        color_selection.color_chosen.connect(
+            lambda color, row=row: self.change_curve_color.emit(row, color)
         )
-
-        color_layout = QHBoxLayout()
-        color_layout.addWidget(color_combo)
-        color_layout.addWidget(color_label)
-        color_widget = QWidget()
-        color_widget.setLayout(color_layout)
-        self.setCellWidget(row, 2, color_widget)
+        self.setCellWidget(row, 2, color_selection)
 
         clear_button = QPushButton("Clear")
         clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
@@ -285,10 +256,6 @@ class Dashboard(QTableWidget):
         if row_idx < 0 or row_idx >= self.row_count:
             raise ValueError(f"Incorrect row id given {row_idx}")
         return self.panel_choices[row_idx].currentIndex()
-
-    def change_color(self, color, row, label):
-        label.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
-        self.change_curve_color.emit(row, color)
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
