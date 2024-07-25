@@ -16,7 +16,7 @@ from pydub.playback import play
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QFont, QMouseEvent
-from PyQt5.QtWidgets import QCheckBox, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
+from PyQt5.QtWidgets import QCheckBox, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu,QRadioButton, QButtonGroup, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
 from scipy.io import wavfile
 from scipy.interpolate import Akima1DInterpolator
 import pyqtgraph as pg
@@ -319,10 +319,65 @@ class AudioAnalyzer(QMainWindow):
         self.selected_region.setZValue(10)
         self.selected_region.hide()
         self.textgrid_visibility_checkboxes = {}
+        self.crosshair = Crosshair([])
+        self.connect_panel_clicks()
+        self.recording = False
+        self.frames = []
+        self.record_button = QPushButton("Record Audio")
+        self.record_button.setStyleSheet("QPushButton { background-color: lightgreen; border: 1px solid black; padding: 5px; }")
+        self.record_button.clicked.connect(self.toggle_recording)
+        self.textgrid_annotations = []
+
+
         main_layout.addLayout(left_layout, 2)  
         main_layout.addLayout(right_layout, 1)
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
+
+        self.textgrid_controls_group_box = QGroupBox("TextGrid Loaded")
+        self.textgrid_controls_group_box.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid gray;
+                border-radius: 5px;
+                margin-top: 1ex;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 0 3px;
+            }
+        """)
+        textgrid_controls_layout = QVBoxLayout()
+        self.textgrid_status_label = QLabel("No TextGrid loaded")
+        self.textgrid_status_label.setStyleSheet("font-size: 16px; color: red;")
+        textgrid_controls_layout.addWidget(self.textgrid_status_label)
+
+        self.textgrid_visibility_checkbox = QCheckBox("Show TextGrid Tiers")
+        self.textgrid_visibility_checkbox.setChecked(True)  # Default to unchecked
+        self.textgrid_visibility_checkbox.toggled.connect(self.toggle_textgrid_tiers)
+        textgrid_controls_layout.addWidget(self.textgrid_visibility_checkbox)
+
+        self.textgrid_controls_group_box.setLayout(textgrid_controls_layout)
+        right_layout.addWidget(self.textgrid_controls_group_box)
+        right_layout.addWidget(self.create_load_buttons())
+        right_layout.addWidget(self.create_audio_control_buttons())
+        self.spectrogram_group_box = QGroupBox("Select Spectrogram") 
+        self.spectrolayout = QVBoxLayout() 
+
+        self.spectrogram_checkbox = QCheckBox("Show/Hide Spectrogram")
+        self.spectrolayout.addWidget(self.spectrogram_checkbox)  
+
+        self.spectrogram_group_box.setLayout(self.spectrolayout)  
+        self.spectrogram_checkbox.setEnabled(False)  
+        self.spectrogram_checkbox.setChecked(False) 
+        self.spectrogram_checkbox.toggled.connect(self.toggle_spectrogram_display)  
+        right_layout.addWidget(self.spectrogram_group_box) 
+
+        self.tier_radio_buttons_layout = QVBoxLayout()
+        self.tier_radio_buttons_group = QGroupBox("Select TextGrid Tier")
+        self.tier_radio_buttons_group.setLayout(self.tier_radio_buttons_layout)
+        right_layout.addWidget(self.tier_radio_buttons_group)
 
         self.dashboard = Dashboard()
         self.dashboard.update_panel.connect(self.update_panel)
@@ -338,24 +393,6 @@ class AudioAnalyzer(QMainWindow):
         right_layout.addWidget(self.dashboard)
         right_layout.setAlignment(Qt.AlignCenter)
         right_layout.addWidget(self.add_row_button)
-        right_layout.addWidget(self.create_load_buttons())
-        right_layout.addWidget(self.create_audio_control_buttons())
-
-        self.textgrid_controls_group_box = QGroupBox("TextGrid Controls")
-        textgrid_controls_layout = QVBoxLayout()
-        self.textgrid_status_label = QLabel("No TextGrid loaded")
-        self.textgrid_status_label.setStyleSheet("font-size: 16px; color: red;")
-        textgrid_controls_layout.addWidget(self.textgrid_status_label)
-
-
-        self.textgrid_controls_group_box.setLayout(textgrid_controls_layout)
-        right_layout.addWidget(self.textgrid_controls_group_box)
-
-        self.textgrid_table = QTableWidget(0, 2)
-        self.textgrid_table.setHorizontalHeaderLabels(["Tier", "Show"])
-        self.textgrid_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        right_layout.addWidget(self.textgrid_table)
-
 
         self.zoom_toolbar = QToolBar(self)
         self.zoom_toolbar.setStyleSheet("background-color: lightgray;")
@@ -422,7 +459,14 @@ class AudioAnalyzer(QMainWindow):
         self.record_button.setStyleSheet("QPushButton { background-color: lightgreen; border: 1px solid black; padding: 5px; }")
         self.record_button.clicked.connect(self.toggle_recording)
         self.textgrid_annotations = []
+    def reset_tier_radio_buttons(self):
+        # Clear the QVBoxLayout and reset the QGroupBox
+        for i in reversed(range(self.tier_radio_buttons_layout.count())):
+            self.tier_radio_buttons_layout.itemAt(i).widget().deleteLater()
+        self.radio_buttons = []
 
+        self.textgrid_status_label.setText("No TextGrid loaded")
+        self.textgrid_status_label.setStyleSheet("font-size: 16px; color: red;")
     def init_real_time_plot(self):
         if not hasattr(self, 'real_time_plot') or self.real_time_plot is None:
             self.real_time_plot = pg.PlotWidget(title="Real-time Audio")
@@ -491,6 +535,18 @@ class AudioAnalyzer(QMainWindow):
         mouse_point = plot_widget.getPlotItem().vb.mapSceneToView(pos)
         x, y = mouse_point.x(), mouse_point.y()
         # print(f"Clicked on panel {panel_index + 1} at x: {x}, y: {y}")
+    def toggle_spectrogram_display(self, checked):
+        if checked:
+            if not self.spectrogram_loaded and hasattr(self, 'spc') and self.spc:
+                self.spectrogram_widget = specto.create_spectrogram_plot(self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix)
+                self.curve_layout.insertWidget(1, self.spectrogram_widget)
+                self.spectrogram_loaded = True
+                self.crosshair.add_central_plot(self.spectrogram_widget)
+        else:
+            if self.spectrogram_loaded:
+                self.spectrogram_widget.setParent(None)
+                self.spectrogram_widget = None
+                self.spectrogram_loaded = False
 
     def clear_curve(self, row):
         panel = self.panels[self.dashboard.selected_panel(row)][1]
@@ -627,6 +683,7 @@ class AudioAnalyzer(QMainWindow):
                 right_axis.linkToView(panel.tertiary_viewbox)
                 panel.tertiary_viewbox.setXLink(panel)
                 panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+
             for channel in selected_channels:
                 channel_data = ema_data.sel(channels=channel).sel(dimensions="y").ema.values
                 channel_label, ok = QInputDialog.getText(self, "Channel Label", f"Enter label for Channel {channel}")
@@ -778,7 +835,7 @@ class AudioAnalyzer(QMainWindow):
                 plot_item.setPen(pg.mkPen(color=color, width=2))
 
     def create_load_buttons(self):
-        load_group_box = QGroupBox("Load Audio and TextGrid Controls")
+        load_group_box = QGroupBox("Load Audio and TextGrid")
         load_layout = QVBoxLayout()
 
         load_audio_button = QPushButton("Load Audio")
@@ -808,11 +865,6 @@ class AudioAnalyzer(QMainWindow):
         play_button.clicked.connect(self.play_selected_region)
         audio_control_layout.addWidget(play_button)
 
-        self.toggle_spectrogram_button = QPushButton("Show/Mask Spectrogram")
-        self.toggle_spectrogram_button.setCheckable(True)
-        self.toggle_spectrogram_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
-        self.toggle_spectrogram_button.clicked.connect(self.toggle_spectrogram)
-        audio_control_layout.addWidget(self.toggle_spectrogram_button)
 
         audio_control_group_box.setLayout(audio_control_layout)
         return audio_control_group_box
@@ -830,6 +882,9 @@ class AudioAnalyzer(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Audio File", "", "Audio Files (*.wav)")
         if not file_path:
             return
+        
+        self.reset_tier_radio_buttons()
+
         self.clear_panels() 
         self.file_path = file_path
         sound_data = calc.Parselmouth(file_path)
@@ -845,8 +900,10 @@ class AudioAnalyzer(QMainWindow):
         spectrogram_widget = None
         if self.spectrogram_loaded:
             self.spectrogram_widget = specto.create_spectrogram_plot(self.spc.frequencies, self.spc.timestamps, self.spc.data_matrix)
-            self.spectrogram_stacked_widget.addWidget(self.spectrogram_widget)
-            self.spectrogram_stacked_widget.setCurrentWidget(self.spectrogram_widget)
+            self.curve_layout.insertWidget(1, self.spectrogram_widget)
+            self.spectrogram_loaded = True
+            self.crosshair.add_central_plot(self.spectrogram_widget)
+
         audio_data = load_channel(file_path)
         x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
         self.add_selection_tool(self.audio_widget)
@@ -860,6 +917,9 @@ class AudioAnalyzer(QMainWindow):
         audio_name = os.path.basename(file_path)
         self.audio_name_label.setText(f"Loaded audio: {audio_name}")
         self.selected_region.setRegion([0, 1])
+
+        self.spectrogram_checkbox.setEnabled(True) 
+
 
     def set_x_axis_limits(self, x_min, x_max):
         for panel, plot_widget in self.panels:
@@ -939,35 +999,36 @@ class AudioAnalyzer(QMainWindow):
         
         self.clear_textgrid_annotations()
         
-        self.populate_textgrid_table(tgt_textgrid)
+        self.populate_textgrid_radio_buttons(tgt_textgrid)
         
         self.display_annotations(tgt_textgrid.get_tier_names()[0])
         
         self.textgrid_status_label.setText(f"Loaded TextGrid: {os.path.basename(filepath)}")
         self.textgrid_status_label.setStyleSheet("font-size: 16px; color: green;")
-        self.display_textgrid_checkbox.setEnabled(True)
 
-    def populate_textgrid_table(self, tgt_textgrid):
-        self.textgrid_table.setRowCount(0)
+    def populate_textgrid_radio_buttons(self, tgt_textgrid):
+        for i in reversed(range(self.tier_radio_buttons_layout.count())):
+            self.tier_radio_buttons_layout.itemAt(i).widget().deleteLater()
+
+        self.radio_buttons = []
+        button_group = QButtonGroup(self)
+        button_group.setExclusive(True)
         for tier_name in tgt_textgrid.get_tier_names():
-            row_position = self.textgrid_table.rowCount()
-            self.textgrid_table.insertRow(row_position)
-            self.textgrid_table.setItem(row_position, 0, QTableWidgetItem(tier_name))
-            
-            checkbox = QCheckBox()
-            checkbox.setChecked(False)
-            checkbox.stateChanged.connect(lambda state, tier=tier_name: self.toggle_tier_display(tier, state))
-            self.textgrid_table.setCellWidget(row_position, 1, checkbox)
+            radio_button = QRadioButton(tier_name)
+            radio_button.setEnabled(self.textgrid_visibility_checkbox.isChecked())  # Set enabled based on checkbox
+            button_group.addButton(radio_button)
+            self.tier_radio_buttons_layout.addWidget(radio_button)
+            radio_button.toggled.connect(lambda checked, tier=tier_name: self.toggle_tier_display(tier, checked))
+            self.radio_buttons.append(radio_button)
 
-    def toggle_tier_display(self, tier_name, state):
-        if state == Qt.Checked:
+        if self.textgrid_visibility_checkbox.isChecked() and self.radio_buttons:
+            self.radio_buttons[0].setChecked(True)
+
+    def toggle_tier_display(self, tier_name, checked):
+        if checked:
             self.display_annotations(tier_name)
         else:
             self.clear_annotations(tier_name)
-
-    def change_tier_display(self, old_tier, new_tier):
-        self.clear_annotations(old_tier)
-        self.display_annotations(new_tier)
 
     def display_annotations(self, tier_name):
         tgt_textgrid = tgt.io.read_textgrid(self.textgrid_path)
@@ -1006,15 +1067,22 @@ class AudioAnalyzer(QMainWindow):
             self.audio_widget.removeItem(item[3])
         self.textgrid_annotations = []
 
+    def toggle_textgrid_tiers(self, checked):
+        for radio_button in self.radio_buttons:
+            radio_button.setEnabled(checked)
+            radio_button.setChecked(False)
+        if not checked:
+            self.clear_textgrid_annotations()
+        else:
+            if self.radio_buttons:
+                self.radio_buttons[0].setChecked(True)
     def toggle_textgrid_display(self, state):
         if state == Qt.Checked:
-            for row in range(self.textgrid_table.rowCount()):
-                tier_name = self.textgrid_table.item(row, 0).text()
-                if self.textgrid_table.cellWidget(row, 1).isChecked():
-                    self.display_annotations(tier_name)
+            for radio_button in self.radio_buttons:
+                if radio_button.isChecked():
+                    self.display_annotations(radio_button.text())
         else:
             self.clear_textgrid_annotations()
-
 
     def export_to_csv(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
@@ -1357,9 +1425,11 @@ class AudioAnalyzer(QMainWindow):
             self.textgrid = None
         self.textgrid_status_label.setText("No TextGrid loaded")
         self.textgrid_status_label.setStyleSheet("font-size: 16px; color: red;")
-        self.display_textgrid_checkbox.setEnabled(False)
-        self.display_textgrid_checkbox.setChecked(False)
+
+        self.spectrogram_checkbox.setEnabled(False)  
+        self.spectrogram_checkbox.setChecked(False)  
         self.clear_formants_and_envelope()
+
 
     def clear_formants_and_envelope(self):
         for panel, plot_widget in self.panels:
@@ -1440,8 +1510,7 @@ class AudioAnalyzer(QMainWindow):
             self.textgrid = None
             self.textgrid_status_label.setText("No TextGrid loaded")
             self.textgrid_status_label.setStyleSheet("font-size: 16px; color: red;")
-            self.display_textgrid_checkbox.setEnabled(False)
-            self.display_textgrid_checkbox.setChecked(False)
+
 
         self.file_path = ""
         self.audio_cursor.hide()
