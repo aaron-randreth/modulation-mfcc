@@ -103,6 +103,7 @@ def create_spectrogram_plot(
         xMin=0, xMax=max(time_segments), yMin=0, yMax=max(frequency_samples)
     )
     plot_item.setMouseEnabled(x=True, y=False)
+    plot_item.getPlotItem().hideAxis('bottom')
 
     return plot_item
 
