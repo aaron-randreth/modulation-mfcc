@@ -1243,30 +1243,25 @@ class AudioAnalyzer(QMainWindow):
             plot_item.max_points.setData(points_x, points_y)
             plot_item.max_points.show()
             print("Removed point")
-
     def zoom_in(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
         view_range = panel.viewRange()
         x_range = view_range[0]
-        y_range = view_range[1]
         zoom_factor = 0.8  # Zoom in by 20%
         panel.setXRange(x_range[0] + (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2,
                         x_range[1] - (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2)
-        panel.setYRange(y_range[0] + (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2,
-                        y_range[1] - (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2)
+
 
     def zoom_out(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
         view_range = panel.viewRange()
         x_range = view_range[0]
-        y_range = view_range[1]
         zoom_factor = 1.2  # Zoom out by 20%
         panel.setXRange(x_range[0] + (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2,
                         x_range[1] - (x_range[1] - x_range[0]) * (1 - zoom_factor) / 2)
-        panel.setYRange(y_range[0] + (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2,
-                        y_range[1] - (y_range[1] - y_range[0]) * (1 - zoom_factor) / 2)
+
 
     def zoom_to_region(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
@@ -1275,6 +1270,7 @@ class AudioAnalyzer(QMainWindow):
             region = self.selected_region.getRegion()
             panel.setXRange(region[0], region[1], padding=0)
             self.restore_y_ranges(panel)
+
 
     def update_derived(self, row, index):
         panel = self.panels[self.dashboard.selected_panel(row)][1]
