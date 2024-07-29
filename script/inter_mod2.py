@@ -1060,7 +1060,6 @@ class AudioAnalyzer(QMainWindow):
                     self.display_annotations(radio_button.text())
         else:
             self.clear_textgrid_annotations()
-
     def export_to_csv(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
@@ -1100,9 +1099,22 @@ class AudioAnalyzer(QMainWindow):
                 max_time = max(max_time, x_data.max())
 
         time_axis = np.arange(min_time, max_time, 0.005)
+        time_axis = np.round(time_axis, 3)
 
         fieldnames = ['Time']
         all_rows = {t: {'Time': t} for t in time_axis}
+
+        for curve_name in selections.keys():
+            if selections[curve_name]['y_values']:
+                fieldnames.append(f"{curve_name} Y Values")
+            if selections[curve_name]['max_peaks']:
+                fieldnames.append(f"{curve_name} Max Peaks")
+            if selections[curve_name]['min_peaks']:
+                fieldnames.append(f"{curve_name} Min Peaks")
+
+        for t in time_axis:
+            for fieldname in fieldnames[1:]:  # skip 'Time'
+                all_rows[t][fieldname] = np.nan
 
         for row, plot_items in panel.plot_items.items():
             combo_box = self.dashboard.cellWidget(row, 0)
@@ -1119,32 +1131,25 @@ class AudioAnalyzer(QMainWindow):
                     continue
 
                 if selections[curve_name]['y_values']:
-                    interpolator = Akima1DInterpolator(x_data, y_data)
-                    y_interpolated = interpolator(time_axis)
+                    y_interpolated = np.interp(time_axis, x_data, y_data)
                     for t, y_val in zip(time_axis, y_interpolated):
                         all_rows[t][f"{curve_name} Y Values"] = y_val
 
                 if selections[curve_name]['max_peaks']:
                     max_finder = MinMaxFinder()
                     x_max, y_max = max_finder.analyse_maximum(x_data, y_data, self.get_selected_region_interval())
+                    x_max = np.round(x_max, 3)
                     for x_val, y_val in zip(x_max, y_max):
-                        if x_val in all_rows:
-                            all_rows[x_val][f"{curve_name} Max Peaks"] = y_val
-                        else:
-                            all_rows[x_val] = {'Time': x_val, f"{curve_name} Max Peaks": y_val}
+                        all_rows[x_val][f"{curve_name} Y Values"] = y_val  # Ensure y-value column is filled
+                        all_rows[x_val][f"{curve_name} Max Peaks"] = y_val
 
                 if selections[curve_name]['min_peaks']:
                     min_finder = MinMaxFinder()
                     x_min, y_min = min_finder.analyse_minimum(x_data, y_data, self.get_selected_region_interval())
+                    x_min = np.round(x_min, 3)
                     for x_val, y_val in zip(x_min, y_min):
-                        if x_val in all_rows:
-                            all_rows[x_val][f"{curve_name} Min Peaks"] = y_val
-                        else:
-                            all_rows[x_val] = {'Time': x_val, f"{curve_name} Min Peaks": y_val}
-
-        fieldnames.extend([f"{curve_name} Y Values" for curve_name in selections.keys() if selections[curve_name]['y_values']])
-        fieldnames.extend([f"{curve_name} Max Peaks" for curve_name in selections.keys() if selections[curve_name]['max_peaks']])
-        fieldnames.extend([f"{curve_name} Min Peaks" for curve_name in selections.keys() if selections[curve_name]['min_peaks']])
+                        all_rows[x_val][f"{curve_name} Y Values"] = y_val  # Ensure y-value column is filled
+                        all_rows[x_val][f"{curve_name} Min Peaks"] = y_val
 
         if textgrid_selections:
             for interval_name in textgrid_selections:
@@ -1159,27 +1164,36 @@ class AudioAnalyzer(QMainWindow):
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(sorted_rows)
-
-    def get_textgrid_interval_text(self, time, interval_name):
-        if not self.textgrid_path:
-            return ""
-
-        textgrid = tgt.io.read_textgrid(self.textgrid_path)
-        tier = textgrid.get_tier_by_name(interval_name)
-        for interval in tier:
-            if interval.start_time <= time <= interval.end_time:
-                return interval.text
-
-        return ""
-
-
     def add_point_on_click(self, plot_item, event):
-        pos = event.scenePos()
-        if not plot_item.getViewBox().sceneBoundingRect().contains(pos):
-            return
+        if isinstance(plot_item, pg.PlotDataItem):
+            pos = event[0].scenePos()
+            if not plot_item.getViewBox().sceneBoundingRect().contains(pos):
+                return
 
-        mouse_point = plot_item.getViewBox().mapSceneToView(pos)
-        x, y = mouse_point.x(), mouse_point.y()
+            mouse_point = plot_item.getViewBox().mapSceneToView(pos)
+            x, y = mouse_point.x(), mouse_point.y()
+        elif isinstance(plot_item, pg.ScatterPlotItem):
+            pos = event[0].scenePos()
+            if not plot_item.getViewBox().sceneBoundingRect().contains(pos):
+                return
+
+            mouse_point = plot_item.getViewBox().mapSceneToView(pos)
+            x, y = mouse_point.x(), mouse_point.y()
+            
+            closest_point = None
+            min_distance = float('inf')
+            
+            for spot in plot_item.points():
+                spot_pos = spot.pos()
+                distance = ((spot_pos.x() - x) ** 2 + (spot_pos.y() - y) ** 2) ** 0.5
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_point = spot
+            
+            if closest_point is None:
+                return
+            
+            x, y = closest_point.pos().x(), closest_point.pos().y()
 
         if self.manual_peak_maximum_addition.isChecked():
             if not hasattr(plot_item, "max_points"):
@@ -1205,7 +1219,6 @@ class AudioAnalyzer(QMainWindow):
             plot_item.min_points.show()
             print("Added min point")
         elif self.manual_peak_removal.isChecked():
-
             if not hasattr(plot_item, "max_points"):
                 return
 
@@ -1220,6 +1233,7 @@ class AudioAnalyzer(QMainWindow):
             plot_item.max_points.setData(points_x, points_y)
             plot_item.max_points.show()
             print("Removed point")
+
     def zoom_in(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
@@ -1263,7 +1277,7 @@ class AudioAnalyzer(QMainWindow):
                     panel.removeItem(plot_item)
             del panel.plot_items[row]
 
-        if index in [1, 2]:  # Dérivée (1: velocity, 2: acceleration)
+        if index == 1:  # Dérivée
             combo_box = self.dashboard.cellWidget(row, 0)
             original_index = combo_box.currentIndex()
 
@@ -1274,12 +1288,7 @@ class AudioAnalyzer(QMainWindow):
                 sample_rate, audio_signal = wavfile.read(self.file_path)
                 audio_signal = audio_signal[int(start * sample_rate):int(end * sample_rate)]
                 amplitude_envelope = calculate_amplitude_envelope(audio_signal, sample_rate)
-                if index == 1:  # Velocity
-                    y_derived = np.gradient(amplitude_envelope)
-                    label = 'Amplitude Envelope Velocity'
-                else:  # Acceleration
-                    y_derived = np.gradient(np.gradient(amplitude_envelope))
-                    label = 'Amplitude Envelope Acceleration'
+                y_derived = np.gradient(np.gradient(amplitude_envelope))
                 time_axis = np.linspace(start, end, len(y_derived))
 
                 if not hasattr(panel, 'quaternary_viewbox'):
@@ -1297,7 +1306,7 @@ class AudioAnalyzer(QMainWindow):
                     panel.plot_items = {}
                 panel.plot_items[row] = [derived_plot]
                 panel.getPlotItem().showAxis('right')
-                panel.getPlotItem().getAxis('right').setLabel(label)
+                panel.getPlotItem().getAxis('right').setLabel('Amplitude Envelope Dérivée')
             else:
                 start, end = self.get_selected_region_interval()
                 if start is None or end is None:
@@ -1306,38 +1315,27 @@ class AudioAnalyzer(QMainWindow):
                 if original_index == 1:  # MFCC
                     audio_data = load_channel(self.file_path)
                     x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
-                    if index == 1:  # Velocity
-                        y_derived = np.gradient(y_mfccs)
-                        label = 'MFCC Velocity'
-                    else:  # Acceleration
-                        y_derived = np.gradient(np.gradient(y_mfccs))
-                        label = 'MFCC Acceleration'
+                    y_derived = np.gradient(np.gradient(y_mfccs))
                     derived_plot = pg.PlotDataItem(x_mfccs, y_derived, pen='r')
                     panel.addItem(derived_plot)
                     if not hasattr(panel, 'plot_items'):
                         panel.plot_items = {}
                     panel.plot_items[row] = [derived_plot]
-                    panel.getPlotItem().getAxis('left').setLabel(label)
+                    panel.getPlotItem().getAxis('left').setLabel('MFCC Dérivée')
                 elif original_index in [2, 3, 4]:  # Formants
                     formant_num = original_index - 1
                     f_times, f1_values, f2_values, f3_values = calc_formants(parselmouth.Sound(self.file_path), start, end)
                     if formant_num == 1:
                         formant_values = f1_values
-                        formant_label = 'Formant 1'
+                        formant_label = 'Formant 1 Dérivée'
                     elif formant_num == 2:
                         formant_values = f2_values
-                        formant_label = 'Formant 2'
+                        formant_label = 'Formant 2 Dérivée'
                     else:
                         formant_values = f3_values
-                        formant_label = 'Formant 3'
+                        formant_label = 'Formant 3 Dérivée'
 
-                    if index == 1:  # Velocity
-                        y_derived = np.gradient(formant_values)
-                        label = f'{formant_label} Velocity'
-                    else:  # Acceleration
-                        y_derived = np.gradient(np.gradient(formant_values))
-                        label = f'{formant_label} Acceleration'
-
+                    y_derived = np.gradient(np.gradient(formant_values))
                     if not hasattr(panel, 'secondary_viewbox'):
                         panel.secondary_viewbox = pg.ViewBox()
                         panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
@@ -1353,9 +1351,10 @@ class AudioAnalyzer(QMainWindow):
                         panel.plot_items = {}
                     panel.plot_items[row] = [derived_plot]
                     panel.getPlotItem().showAxis('right')
-                    panel.getPlotItem().getAxis('right').setLabel(label)
-        else:
+                    panel.getPlotItem().getAxis('right').setLabel(formant_label)
+        else: 
             self.update_panel(row, self.dashboard.cellWidget(row, 0).currentIndex())
+
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
