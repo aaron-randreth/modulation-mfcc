@@ -1165,6 +1165,7 @@ class AudioAnalyzer(QMainWindow):
             writer.writeheader()
             writer.writerows(sorted_rows)
 
+
     def get_textgrid_interval_text(self, time, interval_name):
         if not self.textgrid_path:
             return ""
