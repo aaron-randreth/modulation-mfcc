@@ -2,7 +2,8 @@ import scipy
 import numpy as np
 import xarray as xr
 import parselmouth
-from scipy.signal import butter, filtfilt
+
+from scipy.signal import butter, filtfilt, hilbert
 from scipy.interpolate import interp1d
 def calc_formants(sound: parselmouth.Sound, start_time: float, end_time: float, energy_threshold: float = 20.0):
     formants = sound.to_formant_burg(time_step=0.005, max_number_of_formants=5, maximum_formant=5500, window_length=0.025, pre_emphasis_from=50)
@@ -69,7 +70,8 @@ def read_AG50x(path_to_pos_file):
         )
     )
     return ema_data
-def calculate_amplitude_envelope( signal, sample_rate, frame_size=1024):
+
+def calculate_amplitude_envelope(signal, sample_rate=44100, frame_size=1024, step_size=0.005):
     def bandpass_filter(data, lowcut, highcut, fs, order=5):
         nyquist = 0.5 * fs
         low = lowcut / nyquist
@@ -85,21 +87,26 @@ def calculate_amplitude_envelope( signal, sample_rate, frame_size=1024):
         y = filtfilt(b, a, data)
         return y
 
-    def amplitude_envelope(signal, frame_size):
-        envelope = []
-        for i in range(0, len(signal), frame_size):
-            frame = signal[i:i+frame_size]
-            envelope.append(max(frame))
-        return np.array(envelope)
+
     signal = signal / np.max(np.abs(signal))
 
-    filtered_signal = bandpass_filter(signal, 700, 1300, sample_rate)
-    abs_signal = np.abs(filtered_signal)
-    abs_signal_mean_subtracted = abs_signal - np.mean(abs_signal)
-    final_signal = lowpass_filter(abs_signal_mean_subtracted, 5, sample_rate)
 
-    envelope = amplitude_envelope(final_signal, frame_size)
-    return np.array(final_signal)
+    filtered_signal = bandpass_filter(signal, 700, 1300, sample_rate)
+
+
+    analytic_signal = hilbert(filtered_signal)
+    amplitude_envelope = np.abs(analytic_signal)
+
+
+    smoothed_envelope = lowpass_filter(amplitude_envelope, 5, sample_rate)
+
+
+    step_size_samples = int(step_size * sample_rate)
+    
+
+    envelope_with_step = smoothed_envelope[::step_size_samples]
+    
+    return envelope_with_step
 class MinMaxFinder:
     def find_in_interval(self, times: list[float], values: list[float], interval: tuple[float, float]) -> tuple[np.ndarray[float], np.ndarray[float]]:
         start, end = interval
