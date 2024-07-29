@@ -537,30 +537,10 @@ class AudioAnalyzer(QMainWindow):
                 self.spectrogram_widget.setParent(None)
                 self.spectrogram_widget = None
                 self.spectrogram_loaded = False
-
-
-    def fix_y_axis_limits(self, plot_widget):
-        view_box = plot_widget.getPlotItem().getViewBox()
-        y_range = view_box.viewRange()[1]
-        view_box.setLimits(yMin=y_range[0], yMax=y_range[1])
-        if hasattr(plot_widget, 'secondary_viewbox'):
-            secondary_y_range = plot_widget.secondary_viewbox.viewRange()[1]
-            plot_widget.secondary_viewbox.setLimits(yMin=secondary_y_range[0], yMax=y_range[1])
-        if hasattr(plot_widget, 'tertiary_viewbox'):
-            tertiary_y_range = plot_widget.tertiary_viewbox.viewRange()[1]
-            plot_widget.tertiary_viewbox.setLimits(yMin=tertiary_y_range[0], yMax=y_range[1])
-
     def add_selection_tool(self, plot_widget):
         plot_widget.addItem(self.selected_region)
         self.selected_region.show()
         self.selected_region.sigRegionChanged.connect(self.on_region_changed)
-        
-    def save_y_ranges(self, panel):
-        self.y_range_main_before = panel.viewRange()[1]
-        if hasattr(panel, 'secondary_viewbox'):
-            self.y_range_secondary_before = panel.secondary_viewbox.viewRange()[1]
-        if hasattr(panel, 'tertiary_viewbox'):
-            self.y_range_tertiary_before = panel.tertiary_viewbox.viewRange()[1]
 
     def restore_y_ranges(self, panel):
         if hasattr(self, 'y_range_main_before'):
