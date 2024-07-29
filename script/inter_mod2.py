@@ -37,7 +37,7 @@ class ExportOptionsDialog(QDialog):
         self.setWindowTitle("Export Options")
         self.curves = curves
         self.textgrid_intervals = textgrid_intervals
-
+        self.ema_data = None  # Add this line to store EMA data
         self.init_ui()
 
     def init_ui(self):
@@ -1359,6 +1359,47 @@ class AudioAnalyzer(QMainWindow):
                     panel.plot_items[row] = [derived_plot]
                     panel.getPlotItem().showAxis('right')
                     panel.getPlotItem().getAxis('right').setLabel(label)
+                elif original_index == 5:  # EMA curves
+                    file_path, _ = QFileDialog.getOpenFileName(self, "Open EMA File", "", "EMA Files (*.pos)")
+                    if not file_path:
+                        return
+                    ema_data = read_AG50x(file_path)
+                    num_channels = len(ema_data.channels)
+                    channel_selection_dialog = SelectableListDialog(num_channels, "Channel {}")
+                    if channel_selection_dialog.exec_() != QDialog.Accepted:
+                        return
+                    selected_channels = channel_selection_dialog.get_selected_indices()
+                    time = ema_data.time.values
+
+                    for channel in selected_channels:
+                        channel_data = ema_data.sel(channels=channel).sel(dimensions="y").ema.values
+                        if index == 1:  # Velocity
+                            y_derived = np.gradient(channel_data)
+                            label = 'EMA Velocity'
+                        else:  # Acceleration
+                            y_derived = np.gradient(np.gradient(channel_data))
+                            label = 'EMA Acceleration'
+                        
+                        time_axis = time
+                        if not hasattr(panel, 'tertiary_viewbox'):
+                            panel.tertiary_viewbox = pg.ViewBox()
+                            panel.getPlotItem().scene().addItem(panel.tertiary_viewbox)
+                            right_axis = pg.AxisItem('right')
+                            panel.getPlotItem().layout.addItem(right_axis, 2, 3)
+                            right_axis.linkToView(panel.tertiary_viewbox)
+                            panel.tertiary_viewbox.setXLink(panel)
+                            panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+
+                        derived_plot = pg.PlotDataItem(time_axis, y_derived, pen='r')
+                        panel.tertiary_viewbox.addItem(derived_plot)
+                        if not hasattr(panel, 'plot_items'):
+                            panel.plot_items = {}
+                        if row not in panel.plot_items:
+                            panel.plot_items[row] = []
+                        panel.plot_items[row].append(derived_plot)
+                        panel.getPlotItem().showAxis('right')
+                        panel.getPlotItem().getAxis('right').setLabel(label)
+            
         else:
             self.update_panel(row, self.dashboard.cellWidget(row, 0).currentIndex())
     def toggle_recording(self):
