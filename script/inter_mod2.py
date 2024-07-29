@@ -1105,8 +1105,9 @@ class AudioAnalyzer(QMainWindow):
 
         def add_to_all_rows(t, key, value):
             t_rounded = round(t, 3)
-            if t_rounded in all_rows:
-                all_rows[t_rounded][key] = value
+            if t_rounded not in all_rows:
+                all_rows[t_rounded] = {'Time': t_rounded}
+            all_rows[t_rounded][key] = value
 
         for row, plot_items in panel.plot_items.items():
             combo_box = self.dashboard.cellWidget(row, 0)
@@ -1122,26 +1123,30 @@ class AudioAnalyzer(QMainWindow):
                 else:
                     continue
 
+                # Interpoler les valeurs Y pour les pics
+                interpolator = Akima1DInterpolator(x_data, y_data)
+                y_interpolated = interpolator(time_axis)
+
+                # Ajouter les valeurs Y interpolées si sélectionnées
                 if selections[curve_name]['y_values']:
-                    interpolator = Akima1DInterpolator(x_data, y_data)
-                    y_interpolated = interpolator(time_axis)
                     for t, y_val in zip(time_axis, y_interpolated):
                         add_to_all_rows(t, f"{curve_name} Y Values", y_val)
 
+                # Ajouter les valeurs de pic maximales si sélectionnées
                 if selections[curve_name]['max_peaks']:
                     max_finder = MinMaxFinder()
                     x_max, y_max = max_finder.analyse_maximum(x_data, y_data, self.get_selected_region_interval())
                     for x_val, y_val in zip(x_max, y_max):
                         add_to_all_rows(x_val, f"{curve_name} Max Peaks", y_val)
-                        add_to_all_rows(x_val, f"{curve_name} Y Values", y_val)  # Copier les valeurs max dans Y
 
+                # Ajouter les valeurs de pic minimales si sélectionnées
                 if selections[curve_name]['min_peaks']:
                     min_finder = MinMaxFinder()
                     x_min, y_min = min_finder.analyse_minimum(x_data, y_data, self.get_selected_region_interval())
                     for x_val, y_val in zip(x_min, y_min):
                         add_to_all_rows(x_val, f"{curve_name} Min Peaks", y_val)
-                        add_to_all_rows(x_val, f"{curve_name} Y Values", y_val)  # Copier les valeurs min dans Y
 
+        # Construire les en-têtes en fonction des sélections
         fieldnames.extend([f"{curve_name} Y Values" for curve_name in selections.keys() if selections[curve_name]['y_values']])
         fieldnames.extend([f"{curve_name} Max Peaks" for curve_name in selections.keys() if selections[curve_name]['max_peaks']])
         fieldnames.extend([f"{curve_name} Min Peaks" for curve_name in selections.keys() if selections[curve_name]['min_peaks']])
@@ -1159,6 +1164,7 @@ class AudioAnalyzer(QMainWindow):
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(sorted_rows)
+
     def get_textgrid_interval_text(self, time, interval_name):
         if not self.textgrid_path:
             return ""
