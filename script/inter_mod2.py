@@ -154,19 +154,17 @@ class ColorSelection(QWidget):
         color = self.colors[color_idx]
         self.color_indicator.setStyleSheet(f"background-color: {color}; border: 1px solid black;")
         self.color_chosen.emit(color)
-
 class Dashboard(QTableWidget):
     update_panel = pyqtSignal(int, int)
     toggle_visibility = pyqtSignal(int, int)
     change_curve_color = pyqtSignal(int, str)
-    clear_curve = pyqtSignal(int)
     update_derived = pyqtSignal(int, int)
 
     row_count: int
     panel_choices: list[QComboBox]
 
     def __init__(self) -> None:
-        super().__init__(0, 7)
+        super().__init__(0, 6)  # Change to 6 columns
         self.__init_header__()
 
         self.row_count = 0
@@ -176,15 +174,15 @@ class Dashboard(QTableWidget):
             self.append_row()
 
     def __init_header__(self) -> None:
-        self.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Show", "Clear", "Dérivée"])
+        self.setHorizontalHeaderLabels(["Acoustique", "EMA", "Couleur", "Panel", "Show", "Dérivée"])
         header = self.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
 
-        for section in [3, 4, 6]:
+        for section in [3, 4, 5]:  # Change to fit 6 columns
             header.setSectionResizeMode(section, QHeaderView.Fixed)
             header.resizeSection(section, 10)  
 
-        header.resizeSection(6, 80) 
+        header.resizeSection(5, 100)  # Update for the last column
 
     def reset(self) -> None:
         for row_id in reversed(range(self.row_count)):
@@ -202,7 +200,7 @@ class Dashboard(QTableWidget):
     def add_row(self, row: int) -> None:
         self.insertRow(self.row_count)
         combo_box = QComboBox()
-        combo_box.addItems(["Choose", "Modulation cepstrale", "Formant 1", "Formant 2", "Formant 3", "Courbes ema", "Amplitude Envelope"])
+        combo_box.addItems(["Choose", "Mod_Cepstr", "F1", "F2", "F3", "Courbes ema", "ENV_AMP"])
         combo_box.currentIndexChanged.connect(
             lambda index, row=row:
                 self.update_panel.emit(row, index)
@@ -234,28 +232,21 @@ class Dashboard(QTableWidget):
         )
         self.setCellWidget(row, 2, color_selection)
 
-        clear_button = QPushButton("Clear")
-        clear_button.setStyleSheet("QPushButton { background-color: lightcoral; border: 1px solid black; padding: 5px; }")
-
-        clear_button.clicked.connect(
-            lambda _, row=row:
-                self.clear_curve.emit(row)
-        )
 
         derived_combo_box = QComboBox()  
-        derived_combo_box.addItems(["Original", "Dérivée"])
+        derived_combo_box.addItems(["Traj. (f(x))", "vel. (f(x)')", "acc. (f(x)'')"])
         derived_combo_box.currentIndexChanged.connect(
             lambda index, row=row: 
                 self.update_derived.emit(row, index)
         )
-        self.setCellWidget(row, 5, clear_button)
-        self.setCellWidget(row, 6, derived_combo_box)
+        self.setCellWidget(row, 5, derived_combo_box)
 
-        
+
     def selected_panel(self, row_idx: int) -> int:
         if row_idx < 0 or row_idx >= self.row_count:
             raise ValueError(f"Incorrect row id given {row_idx}")
         return self.panel_choices[row_idx].currentIndex()
+
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
@@ -383,7 +374,6 @@ class AudioAnalyzer(QMainWindow):
         self.dashboard.update_panel.connect(self.update_panel)
         self.dashboard.toggle_visibility.connect(self.toggle_visibility)
         self.dashboard.change_curve_color.connect(self.change_curve_color)
-        self.dashboard.clear_curve.connect(self.clear_curve)
         self.dashboard.update_derived.connect(self.update_derived)
 
         self.add_row_button = QPushButton("+")
@@ -548,19 +538,6 @@ class AudioAnalyzer(QMainWindow):
                 self.spectrogram_widget = None
                 self.spectrogram_loaded = False
 
-    def clear_curve(self, row):
-        panel = self.panels[self.dashboard.selected_panel(row)][1]
-
-        if hasattr(panel, 'plot_items') and row in panel.plot_items:
-            for plot_item in panel.plot_items[row]:
-                if hasattr(panel, 'secondary_viewbox') and plot_item.getViewBox() is panel.secondary_viewbox:
-                    panel.secondary_viewbox.removeItem(plot_item)
-                elif hasattr(panel, 'tertiary_viewbox') and plot_item.getViewBox() is panel.tertiary_viewbox:
-                    panel.tertiary_viewbox.removeItem(plot_item)
-                else:
-                    panel.removeItem(plot_item)
-            del panel.plot_items[row]
-        print(f"Cleared row {row}")
 
     def fix_y_axis_limits(self, plot_widget):
         view_box = plot_widget.getPlotItem().getViewBox()
@@ -1271,7 +1248,6 @@ class AudioAnalyzer(QMainWindow):
             panel.setXRange(region[0], region[1], padding=0)
             self.restore_y_ranges(panel)
 
-
     def update_derived(self, row, index):
         panel = self.panels[self.dashboard.selected_panel(row)][1]
 
@@ -1287,7 +1263,7 @@ class AudioAnalyzer(QMainWindow):
                     panel.removeItem(plot_item)
             del panel.plot_items[row]
 
-        if index == 1:  # Dérivée
+        if index in [1, 2]:  # Dérivée (1: velocity, 2: acceleration)
             combo_box = self.dashboard.cellWidget(row, 0)
             original_index = combo_box.currentIndex()
 
@@ -1298,7 +1274,12 @@ class AudioAnalyzer(QMainWindow):
                 sample_rate, audio_signal = wavfile.read(self.file_path)
                 audio_signal = audio_signal[int(start * sample_rate):int(end * sample_rate)]
                 amplitude_envelope = calculate_amplitude_envelope(audio_signal, sample_rate)
-                y_derived = np.gradient(np.gradient(amplitude_envelope))
+                if index == 1:  # Velocity
+                    y_derived = np.gradient(amplitude_envelope)
+                    label = 'Amplitude Envelope Velocity'
+                else:  # Acceleration
+                    y_derived = np.gradient(np.gradient(amplitude_envelope))
+                    label = 'Amplitude Envelope Acceleration'
                 time_axis = np.linspace(start, end, len(y_derived))
 
                 if not hasattr(panel, 'quaternary_viewbox'):
@@ -1316,7 +1297,7 @@ class AudioAnalyzer(QMainWindow):
                     panel.plot_items = {}
                 panel.plot_items[row] = [derived_plot]
                 panel.getPlotItem().showAxis('right')
-                panel.getPlotItem().getAxis('right').setLabel('Amplitude Envelope Dérivée')
+                panel.getPlotItem().getAxis('right').setLabel(label)
             else:
                 start, end = self.get_selected_region_interval()
                 if start is None or end is None:
@@ -1325,27 +1306,38 @@ class AudioAnalyzer(QMainWindow):
                 if original_index == 1:  # MFCC
                     audio_data = load_channel(self.file_path)
                     x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
-                    y_derived = np.gradient(np.gradient(y_mfccs))
+                    if index == 1:  # Velocity
+                        y_derived = np.gradient(y_mfccs)
+                        label = 'MFCC Velocity'
+                    else:  # Acceleration
+                        y_derived = np.gradient(np.gradient(y_mfccs))
+                        label = 'MFCC Acceleration'
                     derived_plot = pg.PlotDataItem(x_mfccs, y_derived, pen='r')
                     panel.addItem(derived_plot)
                     if not hasattr(panel, 'plot_items'):
                         panel.plot_items = {}
                     panel.plot_items[row] = [derived_plot]
-                    panel.getPlotItem().getAxis('left').setLabel('MFCC Dérivée')
+                    panel.getPlotItem().getAxis('left').setLabel(label)
                 elif original_index in [2, 3, 4]:  # Formants
                     formant_num = original_index - 1
                     f_times, f1_values, f2_values, f3_values = calc_formants(parselmouth.Sound(self.file_path), start, end)
                     if formant_num == 1:
                         formant_values = f1_values
-                        formant_label = 'Formant 1 Dérivée'
+                        formant_label = 'Formant 1'
                     elif formant_num == 2:
                         formant_values = f2_values
-                        formant_label = 'Formant 2 Dérivée'
+                        formant_label = 'Formant 2'
                     else:
                         formant_values = f3_values
-                        formant_label = 'Formant 3 Dérivée'
+                        formant_label = 'Formant 3'
 
-                    y_derived = np.gradient(np.gradient(formant_values))
+                    if index == 1:  # Velocity
+                        y_derived = np.gradient(formant_values)
+                        label = f'{formant_label} Velocity'
+                    else:  # Acceleration
+                        y_derived = np.gradient(np.gradient(formant_values))
+                        label = f'{formant_label} Acceleration'
+
                     if not hasattr(panel, 'secondary_viewbox'):
                         panel.secondary_viewbox = pg.ViewBox()
                         panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
@@ -1361,10 +1353,9 @@ class AudioAnalyzer(QMainWindow):
                         panel.plot_items = {}
                     panel.plot_items[row] = [derived_plot]
                     panel.getPlotItem().showAxis('right')
-                    panel.getPlotItem().getAxis('right').setLabel(formant_label)
-        else: 
+                    panel.getPlotItem().getAxis('right').setLabel(label)
+        else:
             self.update_panel(row, self.dashboard.cellWidget(row, 0).currentIndex())
-
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
