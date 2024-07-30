@@ -6,7 +6,7 @@ from scipy import signal
 from scipy.signal import argrelextrema, find_peaks
 
 import librosa
-
+import numpy as np
 import numpy
 import numpy.typing as npt
 
@@ -44,9 +44,9 @@ def load_channel(
 
     return audio_data
 
-
+#scrip leonardo mettre la source !!!
 def get_MFCCS_change(
-    audio_data: numpy.ndarray,
+    audio_data: np.ndarray,
     signal_sample_rate=10_000,
     tStep=0.005,
     winLen=0.025,
@@ -55,13 +55,13 @@ def get_MFCCS_change(
     removeFirst=1,
     filtCutoff=12,
     filtOrd=6,
-) -> tuple[numpy.typing.NDArray[numpy.float64], numpy.typing.NDArray[numpy.float64]]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     @Returns: mfcc_times, mfcc_values
     """
 
-    win_length = int(numpy.rint(winLen * signal_sample_rate))
-    hop_length = int(numpy.rint(tStep * signal_sample_rate))
+    win_length = int(np.rint(winLen * signal_sample_rate))
+    hop_length = int(np.rint(tStep * signal_sample_rate))
 
     myMfccs = librosa.feature.mfcc(
         y=audio_data,
@@ -79,13 +79,14 @@ def get_MFCCS_change(
     b1, a1 = signal.butter(filtOrd, cutOffNorm, "lowpass")
 
     filtMffcs = signal.filtfilt(b1, a1, myMfccs, axis=1)
-    myAbsDiff = numpy.sqrt(numpy.gradient(filtMffcs, axis=1) ** 2)
+    myAbsDiff = np.sqrt(np.gradient(filtMffcs, axis=1) ** 2)
 
-    totChange = numpy.sum(myAbsDiff, axis=0)
+    totChange = np.sum(myAbsDiff, axis=0)
     totChange = signal.filtfilt(b1, a1, totChange)
 
     values = totChange
-    times = numpy.arange(len(totChange)) / 200.0
+    times = np.arange(len(totChange)) * tStep
+    print(times)
 
     return times, values
 
@@ -131,5 +132,4 @@ class MfccSource(DataSource):
     @override
     def get_subset(self, start_idx: int = 0, end_idx: int = -1) -> DataSource:
         return type(self)(self.file_path, start_idx, end_idx)
-
 
