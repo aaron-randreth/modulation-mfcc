@@ -708,6 +708,9 @@ class AudioAnalyzer(QMainWindow):
         panel_index = self.dashboard.selected_panel(row)
         panel = self.panels[panel_index][1]
 
+        # Clear previous plot items on the same row
+        self.clear_plot_items(row, panel)
+
         if index == 1:  # MFCC
             audio_data = load_channel(self.file_path)
             x_mfccs, y_mfccs = get_MFCCS_change(
@@ -721,17 +724,9 @@ class AudioAnalyzer(QMainWindow):
                 filtCutoff=self.mfcc_config["filtCutoff"],
                 filtOrd=self.mfcc_config["filtOrd"]
             )
-            mfcc_curve = panel.plot(x_mfccs, y_mfccs, pen='r', clear=False)
+            mfcc_curve = pg.PlotDataItem(x_mfccs, y_mfccs, pen='r')
 
-            mfcc_curve.setCurveClickable(True)
-            mfcc_curve.sigClicked.connect(self.add_point_on_click)
-
-            print("MFCC curve connected to click event")
-            if not hasattr(panel, 'plot_items'):
-                panel.plot_items = {}
-            panel.plot_items[row] = [mfcc_curve]
-            panel.getPlotItem().getViewBox().setMouseEnabled(y=False)
-            panel.getPlotItem().getAxis('left').setLabel('MFCC')
+            self.add_curve_to_panel(panel, mfcc_curve, row, 'MFCC')
 
         elif index in [2, 3, 4]:  # Formants
             formant_num = index - 1
@@ -749,25 +744,9 @@ class AudioAnalyzer(QMainWindow):
                 formant_values = f3_values
                 formant_label = 'Formant 3'
 
-            if not hasattr(panel, 'secondary_viewbox'):
-                panel.secondary_viewbox = pg.ViewBox()
-                panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
-                right_axis = pg.AxisItem('right')
-                panel.getPlotItem().layout.addItem(right_axis, 2, 3)
-                right_axis.linkToView(panel.secondary_viewbox)
-                panel.secondary_viewbox.setXLink(panel)
-                panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
-
             formant_points = pg.ScatterPlotItem(x=f_times, y=formant_values, symbol='o', size=5, pen=pg.mkPen('b'), brush=pg.mkBrush('b'))
-            formant_points.sigClicked.connect(self.add_point_on_click)
 
-            print(f"Formant {formant_num} curve connected to click event")
-            panel.secondary_viewbox.addItem(formant_points)
-            if not hasattr(panel, 'plot_items'):
-                panel.plot_items = {}
-            panel.plot_items[row] = [formant_points]
-            panel.getPlotItem().showAxis('right')
-            panel.getPlotItem().getAxis('right').setLabel(formant_label)
+            self.add_curve_to_panel(panel, formant_points, row, formant_label)
 
         elif index == 5:  # courbes ema
             file_path, _ = QFileDialog.getOpenFileName(self, "Open EMA File", "", "EMA Files (*.pos)")
@@ -780,14 +759,6 @@ class AudioAnalyzer(QMainWindow):
                 return
             selected_channels = channel_selection_dialog.get_selected_indices()
             time = ema_data.time.values
-            if not hasattr(panel, 'tertiary_viewbox'):
-                panel.tertiary_viewbox = pg.ViewBox()
-                panel.getPlotItem().scene().addItem(panel.tertiary_viewbox)
-                right_axis = pg.AxisItem('right')
-                panel.getPlotItem().layout.addItem(right_axis, 2, 3)
-                right_axis.linkToView(panel.tertiary_viewbox)
-                panel.tertiary_viewbox.setXLink(panel)
-                panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
 
             for channel in selected_channels:
                 channel_data = ema_data.sel(channels=channel).sel(dimensions="y").ema.values
@@ -796,20 +767,8 @@ class AudioAnalyzer(QMainWindow):
                     channel_label = f"EMA Channel {channel}"
 
                 ema_curve = pg.PlotDataItem(time, channel_data, pen=pg.mkPen(width=2))
-                ema_curve.setCurveClickable(True)
-                ema_curve.sigClicked.connect(self.add_point_on_click)
 
-                panel.tertiary_viewbox.addItem(ema_curve)
-                if not hasattr(panel, 'plot_items'):
-                    panel.plot_items = {}
-                if row not in panel.plot_items:
-                    panel.plot_items[row] = []
-                panel.plot_items[row].append(ema_curve)
-
-            panel.getPlotItem().showAxis('left')
-            panel.getPlotItem().getAxis('left').setLabel(channel_label)
-            if right_axis is not None:
-                right_axis.setLabel(channel_label)
+                self.add_curve_to_panel(panel, ema_curve, row, channel_label)
 
             table_item = self.dashboard.cellWidget(row, 0)
             table_item.setItemText(5, channel_label)
@@ -823,28 +782,64 @@ class AudioAnalyzer(QMainWindow):
             amplitude_envelope = calculate_amplitude_envelope(audio_signal, sample_rate)
             time_axis = np.linspace(start, end, len(amplitude_envelope))
 
+            envelope_curve = pg.PlotDataItem(time_axis, amplitude_envelope, pen='m')
+
+            self.add_curve_to_panel(panel, envelope_curve, row, 'Amplitude Envelope')
+
+    def add_curve_to_panel(self, panel, curve, row, label):
+        if not hasattr(panel, 'plot_items'):
+            panel.plot_items = {}
+
+        if len(panel.plot_items) == 0:
+            # First curve - left Y-axis
+            panel.addItem(curve)
+            panel.getPlotItem().getAxis('left').setLabel(label)
+        elif len(panel.plot_items) == 1:
+            # Second curve - right Y-axis
+            if not hasattr(panel, 'secondary_viewbox'):
+                panel.secondary_viewbox = pg.ViewBox()
+                panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
+                right_axis = pg.AxisItem('right')
+                panel.getPlotItem().layout.addItem(right_axis, 2, 3)  # Place the right axis correctly
+                right_axis.linkToView(panel.secondary_viewbox)
+                panel.secondary_viewbox.setXLink(panel)
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+            panel.secondary_viewbox.addItem(curve)
+            panel.getPlotItem().showAxis('right')
+            panel.getPlotItem().getAxis('right').setLabel(label)
+            panel.getPlotItem().hideAxis('right')
+        elif len(panel.plot_items) == 2:
+            # Third curve - secondary left Y-axis (left bis)
+            if not hasattr(panel, 'tertiary_viewbox'):
+                panel.tertiary_viewbox = pg.ViewBox()
+                panel.getPlotItem().scene().addItem(panel.tertiary_viewbox)
+                left_axis_2 = pg.AxisItem('left')
+                panel.getPlotItem().layout.addItem(left_axis_2, 2, 0)  # Place the left bis axis correctly
+                left_axis_2.linkToView(panel.tertiary_viewbox)
+                panel.tertiary_viewbox.setXLink(panel)
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+            panel.tertiary_viewbox.addItem(curve)
+            panel.getPlotItem().getAxis('left').setLabel(label)
+        elif len(panel.plot_items) == 3:
+            # Fourth curve - secondary right Y-axis (right bis)
             if not hasattr(panel, 'quaternary_viewbox'):
                 panel.quaternary_viewbox = pg.ViewBox()
                 panel.getPlotItem().scene().addItem(panel.quaternary_viewbox)
-                right_axis = pg.AxisItem('right')
-                panel.getPlotItem().layout.addItem(right_axis, 2, 4)
-                right_axis.linkToView(panel.quaternary_viewbox)
+                right_axis_2 = pg.AxisItem('right')
+                panel.getPlotItem().layout.addItem(right_axis_2, 2, 4)  # Place the right bis axis correctly
+                right_axis_2.linkToView(panel.quaternary_viewbox)
                 panel.quaternary_viewbox.setXLink(panel)
-                panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.quaternary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.quaternary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+            panel.quaternary_viewbox.addItem(curve)
+            panel.getPlotItem().getAxis('right').setLabel(label)
 
-            envelope_curve = pg.PlotDataItem(time_axis, amplitude_envelope, pen='m', clear=False)
-            envelope_curve.setCurveClickable(True)
-            envelope_curve.sigClicked.connect(self.add_point_on_click)
-
-            print("Amplitude Envelope curve connected to click event")
-            panel.quaternary_viewbox.addItem(envelope_curve)
-            if not hasattr(panel, 'plot_items'):
-                panel.plot_items = {}
-            panel.plot_items[row] = [envelope_curve]
-            panel.getPlotItem().showAxis('right')
-            panel.getPlotItem().getAxis('right').setLabel('Amplitude Envelope')
-
+        panel.plot_items[row] = [curve]
         self.crosshair.add_panel_plot(panel)
+
+
 
     def toggle_visibility(self, row, state):
         panel = self.panels[self.dashboard.selected_panel(row)][1]
@@ -1560,6 +1555,18 @@ class AudioAnalyzer(QMainWindow):
             self.stop_recording()
         else:
             self.start_recording()
+    def clear_plot_items(self, row, panel):
+        if hasattr(panel, 'plot_items') and row in panel.plot_items:
+            for plot_item in panel.plot_items[row]:
+                if hasattr(panel, 'secondary_viewbox') and plot_item.getViewBox() is panel.secondary_viewbox:
+                    panel.secondary_viewbox.removeItem(plot_item)
+                elif hasattr(panel, 'tertiary_viewbox') and plot_item.getViewBox() is panel.tertiary_viewbox:
+                    panel.tertiary_viewbox.removeItem(plot_item)
+                elif hasattr(panel, 'quaternary_viewbox') and plot_item.getViewBox() is panel.quaternary_viewbox:
+                    panel.quaternary_viewbox.removeItem(plot_item)
+                else:
+                    panel.removeItem(plot_item)
+            del panel.plot_items[row]
 
     def hide_real_time_plot(self):
         if hasattr(self, 'real_time_plot') and self.real_time_plot is not None:
