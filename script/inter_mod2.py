@@ -791,16 +791,18 @@ class AudioAnalyzer(QMainWindow):
             panel.plot_items = {}
 
         if len(panel.plot_items) == 0:
-            # First curve - left Y-axis
+            # Première courbe - axe Y gauche
             panel.addItem(curve)
             panel.getPlotItem().getAxis('left').setLabel(label)
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
         elif len(panel.plot_items) == 1:
-            # Second curve - right Y-axis
+            # Deuxième courbe - axe Y droite
             if not hasattr(panel, 'secondary_viewbox'):
                 panel.secondary_viewbox = pg.ViewBox()
                 panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
                 right_axis = pg.AxisItem('right')
-                panel.getPlotItem().layout.addItem(right_axis, 2, 3)  # Place the right axis correctly
+                panel.getPlotItem().layout.addItem(right_axis, 2, 3)  # Placez l'axe droit correctement
                 right_axis.linkToView(panel.secondary_viewbox)
                 panel.secondary_viewbox.setXLink(panel)
                 panel.getPlotItem().getViewBox().sigResized.connect(
@@ -809,36 +811,41 @@ class AudioAnalyzer(QMainWindow):
             panel.getPlotItem().showAxis('right')
             panel.getPlotItem().getAxis('right').setLabel(label)
             panel.getPlotItem().hideAxis('right')
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
         elif len(panel.plot_items) == 2:
-            # Third curve - secondary left Y-axis (left bis)
+            # Troisième courbe - axe Y gauche secondaire (left bis)
             if not hasattr(panel, 'tertiary_viewbox'):
                 panel.tertiary_viewbox = pg.ViewBox()
                 panel.getPlotItem().scene().addItem(panel.tertiary_viewbox)
                 left_axis_2 = pg.AxisItem('left')
-                panel.getPlotItem().layout.addItem(left_axis_2, 2, 0)  # Place the left bis axis correctly
+                panel.getPlotItem().layout.addItem(left_axis_2, 2, 0)  # Placez l'axe left bis correctement
                 left_axis_2.linkToView(panel.tertiary_viewbox)
                 panel.tertiary_viewbox.setXLink(panel)
                 panel.getPlotItem().getViewBox().sigResized.connect(
                     lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
             panel.tertiary_viewbox.addItem(curve)
             panel.getPlotItem().getAxis('left').setLabel(label)
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
         elif len(panel.plot_items) == 3:
-            # Fourth curve - secondary right Y-axis (right bis)
+            # Quatrième courbe - axe Y droite secondaire (right bis)
             if not hasattr(panel, 'quaternary_viewbox'):
                 panel.quaternary_viewbox = pg.ViewBox()
                 panel.getPlotItem().scene().addItem(panel.quaternary_viewbox)
                 right_axis_2 = pg.AxisItem('right')
-                panel.getPlotItem().layout.addItem(right_axis_2, 2, 4)  # Place the right bis axis correctly
+                panel.getPlotItem().layout.addItem(right_axis_2, 2, 4)  # Placez l'axe right bis correctement
                 right_axis_2.linkToView(panel.quaternary_viewbox)
                 panel.quaternary_viewbox.setXLink(panel)
                 panel.getPlotItem().getViewBox().sigResized.connect(
                     lambda: panel.quaternary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
             panel.quaternary_viewbox.addItem(curve)
             panel.getPlotItem().getAxis('right').setLabel(label)
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
 
         panel.plot_items[row] = [curve]
         self.crosshair.add_panel_plot(panel)
-
 
 
     def toggle_visibility(self, row, state):
@@ -1337,7 +1344,7 @@ class AudioAnalyzer(QMainWindow):
             print("Added min point")
 
         elif self.manual_peak_removal.isChecked():
-            threshold = 0.01  # Ajustez ce seuil selon vos besoins
+            threshold = 0.005  # Ajustez ce seuil selon vos besoins
             print(f"Removing points near: x={x}, y={y} within threshold {threshold}")  # Debugging line
 
             if hasattr(plot_item, "max_points"):
@@ -1355,7 +1362,7 @@ class AudioAnalyzer(QMainWindow):
 
             if hasattr(plot_item, "min_points"):
                 points_x, points_y = plot_item.min_points.getData()
-                distances = np.sqrt((points_x - x) ** 2 + (points_y - y) ** 2)
+                distances = np.sqrt((points_x - x) ** 2)
                 indices_to_remove = np.where(distances < threshold)[0]
                 print(f"Min points distances: {distances}, indices to remove: {indices_to_remove}")  # Debugging line
                 if indices_to_remove.size > 0:
