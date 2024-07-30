@@ -36,7 +36,7 @@ class MFCCConfigDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("MFCC Configuration")
+        self.setWindowTitle("Configuration")
 
         self.layout = QVBoxLayout()
 
@@ -337,6 +337,7 @@ class Dashboard(QTableWidget):
         for row in range(self.rowCount()):
             if self.selected_panel(row) == panel:
                 self.cellWidget(row, 0).setItemText(1, name)
+
     def update_panel_names(self, name, panel):
         for row in range(self.rowCount()):
             if self.selected_panel(row) == panel - 1:  # panel is 1-indexed, self.selected_panel is 0-indexed
@@ -544,7 +545,7 @@ class AudioAnalyzer(QMainWindow):
         self.record_button.clicked.connect(self.toggle_recording)
         self.textgrid_annotations = []
                 # Ajouter un bouton pour ouvrir la fenêtre de configuration MFCC
-        self.config_mfcc_button = QPushButton("Configure MFCC")
+        self.config_mfcc_button = QPushButton("Configure")
         self.config_mfcc_button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
         self.config_mfcc_button.clicked.connect(self.open_mfcc_config)
         right_layout.addWidget(self.config_mfcc_button)
