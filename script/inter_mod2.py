@@ -16,7 +16,7 @@ from pydub.playback import play
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QFont, QMouseEvent
-from PyQt5.QtWidgets import QCheckBox, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu,QRadioButton, QButtonGroup, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
+from PyQt5.QtWidgets import QCheckBox,QLineEdit, QHeaderView, QGroupBox, QTableWidget, QTableWidgetItem, QComboBox, QMenu,QRadioButton, QButtonGroup, QStackedWidget, QMenuBar, QToolBar, QAction, QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QGridLayout, QLabel, QScrollArea, QListWidget, QAbstractItemView, QDialog, QDialogButtonBox, QColorDialog, QInputDialog
 from scipy.io import wavfile
 from scipy.interpolate import Akima1DInterpolator
 import pyqtgraph as pg
@@ -30,6 +30,91 @@ from ui import create_plot_widget, SelectableListDialog, Crosshair, MinMaxAnalys
 
 pg.setConfigOptions(foreground="black", background="w")
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel, QPushButton
+class MFCCConfigDialog(QDialog):
+    config_updated = pyqtSignal(dict)
+    name_changed = pyqtSignal(str, int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("MFCC Configuration")
+
+        self.layout = QVBoxLayout()
+
+        self.name_label = QLabel("Name:")
+        self.name_input = QLineEdit("Mod_Cepstr")
+
+        self.sample_rate_label = QLabel("Sample Rate:")
+        self.sample_rate_input = QLineEdit("10000")
+
+        self.tStep_label = QLabel("Time Step:")
+        self.tStep_input = QLineEdit("0.005")
+
+        self.winLen_label = QLabel("Window Length:")
+        self.winLen_input = QLineEdit("0.025")
+
+        self.n_mfcc_label = QLabel("Number of MFCCs:")
+        self.n_mfcc_input = QLineEdit("13")
+
+        self.n_fft_label = QLabel("FFT Length:")
+        self.n_fft_input = QLineEdit("512")
+
+        self.removeFirst_label = QLabel("Remove First:")
+        self.removeFirst_input = QCheckBox()
+        self.removeFirst_input.setChecked(True)
+
+        self.filtCutoff_label = QLabel("Filter Cutoff:")
+        self.filtCutoff_input = QLineEdit("12")
+
+        self.filtOrd_label = QLabel("Filter Order:")
+        self.filtOrd_input = QLineEdit("6")
+
+        self.panel_label = QLabel("Select Panel:")
+        self.panel_combo = QComboBox()
+        self.panel_combo.addItems(["1", "2", "3", "4"])
+
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.clicked.connect(self.apply_changes)
+
+        self.layout.addWidget(self.name_label)
+        self.layout.addWidget(self.name_input)
+        self.layout.addWidget(self.sample_rate_label)
+        self.layout.addWidget(self.sample_rate_input)
+        self.layout.addWidget(self.tStep_label)
+        self.layout.addWidget(self.tStep_input)
+        self.layout.addWidget(self.winLen_label)
+        self.layout.addWidget(self.winLen_input)
+        self.layout.addWidget(self.n_mfcc_label)
+        self.layout.addWidget(self.n_mfcc_input)
+        self.layout.addWidget(self.n_fft_label)
+        self.layout.addWidget(self.n_fft_input)
+        self.layout.addWidget(self.removeFirst_label)
+        self.layout.addWidget(self.removeFirst_input)
+        self.layout.addWidget(self.filtCutoff_label)
+        self.layout.addWidget(self.filtCutoff_input)
+        self.layout.addWidget(self.filtOrd_label)
+        self.layout.addWidget(self.filtOrd_input)
+        self.layout.addWidget(self.panel_label)
+        self.layout.addWidget(self.panel_combo)
+        self.layout.addWidget(self.apply_button)
+
+        self.setLayout(self.layout)
+
+    def apply_changes(self):
+        config = {
+            "name": self.name_input.text(),
+            "sample_rate": int(self.sample_rate_input.text()),
+            "tStep": float(self.tStep_input.text()),
+            "winLen": float(self.winLen_input.text()),
+            "n_mfcc": int(self.n_mfcc_input.text()),
+            "n_fft": int(self.n_fft_input.text()),
+            "removeFirst": self.removeFirst_input.isChecked(),
+            "filtCutoff": int(self.filtCutoff_input.text()),
+            "filtOrd": int(self.filtOrd_input.text()),
+            "panel": int(self.panel_combo.currentText())
+        }
+        self.config_updated.emit(config)
+        self.name_changed.emit(config["name"], config["panel"])
+        self.accept()
 
 class ExportOptionsDialog(QDialog):
     def __init__(self, parent, curves, textgrid_intervals):
@@ -159,6 +244,7 @@ class Dashboard(QTableWidget):
     toggle_visibility = pyqtSignal(int, int)
     change_curve_color = pyqtSignal(int, str)
     update_derived = pyqtSignal(int, int)
+    name_changed = pyqtSignal(str, int)
 
     row_count: int
     panel_choices: list[QComboBox]
@@ -247,6 +333,14 @@ class Dashboard(QTableWidget):
             raise ValueError(f"Incorrect row id given {row_idx}")
         return self.panel_choices[row_idx].currentIndex()
 
+    def update_name(self, name: str, panel: int) -> None:
+        for row in range(self.rowCount()):
+            if self.selected_panel(row) == panel:
+                self.cellWidget(row, 0).setItemText(1, name)
+    def update_panel_names(self, name, panel):
+        for row in range(self.rowCount()):
+            if self.selected_panel(row) == panel - 1:  # panel is 1-indexed, self.selected_panel is 0-indexed
+                self.cellWidget(row, 0).setItemText(1, name)
 
 class AudioAnalyzer(QMainWindow):
     textgrid: ui_tiers.TextGrid | None = None
@@ -449,6 +543,41 @@ class AudioAnalyzer(QMainWindow):
         self.record_button.setStyleSheet("QPushButton { background-color: lightgreen; border: 1px solid black; padding: 5px; }")
         self.record_button.clicked.connect(self.toggle_recording)
         self.textgrid_annotations = []
+                # Ajouter un bouton pour ouvrir la fenêtre de configuration MFCC
+        self.config_mfcc_button = QPushButton("Configure MFCC")
+        self.config_mfcc_button.setStyleSheet("QPushButton { background-color: lightblue; border: 1px solid black; padding: 5px; }")
+        self.config_mfcc_button.clicked.connect(self.open_mfcc_config)
+        right_layout.addWidget(self.config_mfcc_button)
+
+        self.mfcc_config = {
+            "name": "Mod_Cepstr",
+            "sample_rate": 10000,
+            "tStep": 0.005,
+            "winLen": 0.025,
+            "n_mfcc": 13,
+            "n_fft": 512,
+            "removeFirst": True,
+            "filtCutoff": 12,
+            "filtOrd": 6,
+            "panel": 1
+        }
+
+        # Connecter le signal de changement de nom à une méthode de mise à jour
+        self.dashboard.name_changed.connect(self.update_mfcc_name)
+
+    def open_mfcc_config(self):
+        self.mfcc_config_dialog = MFCCConfigDialog(self)
+        self.mfcc_config_dialog.config_updated.connect(self.update_mfcc_config)
+        self.mfcc_config_dialog.name_changed.connect(self.dashboard.update_panel_names)  # Connecter le changement de nom
+        self.mfcc_config_dialog.show()
+
+    def update_mfcc_config(self, config):
+        self.mfcc_config = config
+        print("Updated MFCC Config:", self.mfcc_config)
+
+    def update_mfcc_name(self, name, panel):
+        self.dashboard.update_panel_names(name, panel)
+
     def reset_tier_radio_buttons(self):
         # Clear the QVBoxLayout and reset the QGroupBox
         for i in reversed(range(self.tier_radio_buttons_layout.count())):
@@ -537,10 +666,30 @@ class AudioAnalyzer(QMainWindow):
                 self.spectrogram_widget.setParent(None)
                 self.spectrogram_widget = None
                 self.spectrogram_loaded = False
+
+
+    def fix_y_axis_limits(self, plot_widget):
+        view_box = plot_widget.getPlotItem().getViewBox()
+        y_range = view_box.viewRange()[1]
+        view_box.setLimits(yMin=y_range[0], yMax=y_range[1])
+        if hasattr(plot_widget, 'secondary_viewbox'):
+            secondary_y_range = plot_widget.secondary_viewbox.viewRange()[1]
+            plot_widget.secondary_viewbox.setLimits(yMin=secondary_y_range[0], yMax=y_range[1])
+        if hasattr(plot_widget, 'tertiary_viewbox'):
+            tertiary_y_range = plot_widget.tertiary_viewbox.viewRange()[1]
+            plot_widget.tertiary_viewbox.setLimits(yMin=tertiary_y_range[0], yMax=y_range[1])
+
     def add_selection_tool(self, plot_widget):
         plot_widget.addItem(self.selected_region)
         self.selected_region.show()
         self.selected_region.sigRegionChanged.connect(self.on_region_changed)
+        
+    def save_y_ranges(self, panel):
+        self.y_range_main_before = panel.viewRange()[1]
+        if hasattr(panel, 'secondary_viewbox'):
+            self.y_range_secondary_before = panel.secondary_viewbox.viewRange()[1]
+        if hasattr(panel, 'tertiary_viewbox'):
+            self.y_range_tertiary_before = panel.tertiary_viewbox.viewRange()[1]
 
     def restore_y_ranges(self, panel):
         if hasattr(self, 'y_range_main_before'):
@@ -555,24 +704,22 @@ class AudioAnalyzer(QMainWindow):
         print("Selected region from", region[0], "to", region[1])
     
     def update_panel(self, row, index):
-        panel = self.panels[self.dashboard.selected_panel(row)][1]
+        panel_index = self.dashboard.selected_panel(row)
+        panel = self.panels[panel_index][1]
 
-        if hasattr(panel, 'plot_items') and row in panel.plot_items:
-            for old_item in panel.plot_items[row]:
-                if hasattr(panel, 'secondary_viewbox') and old_item.getViewBox() is panel.secondary_viewbox:
-                    panel.secondary_viewbox.removeItem(old_item)
-                elif hasattr(panel, 'tertiary_viewbox') and old_item.getViewBox() is panel.tertiary_viewbox:
-                    panel.tertiary_viewbox.removeItem(old_item)
-                elif hasattr(panel, 'quaternary_viewbox') and old_item.getViewBox() is panel.quaternary_viewbox:
-                    panel.quaternary_viewbox.removeItem(old_item)
-                else:
-                    panel.removeItem(old_item)
-            del panel.plot_items[row]
-
-        right_axis = None
         if index == 1:  # MFCC
             audio_data = load_channel(self.file_path)
-            x_mfccs, y_mfccs = get_MFCCS_change(audio_data)
+            x_mfccs, y_mfccs = get_MFCCS_change(
+                audio_data,
+                signal_sample_rate=self.mfcc_config["sample_rate"],
+                tStep=self.mfcc_config["tStep"],
+                winLen=self.mfcc_config["winLen"],
+                n_mfcc=self.mfcc_config["n_mfcc"],
+                n_fft=self.mfcc_config["n_fft"],
+                removeFirst=self.mfcc_config["removeFirst"],
+                filtCutoff=self.mfcc_config["filtCutoff"],
+                filtOrd=self.mfcc_config["filtOrd"]
+            )
             mfcc_curve = panel.plot(x_mfccs, y_mfccs, pen='r', clear=False)
 
             mfcc_curve.setCurveClickable(True)
@@ -1002,7 +1149,7 @@ class AudioAnalyzer(QMainWindow):
             self.audio_widget.addItem(end_line)
             
             mid_time = (start_time + end_time) / 2
-            text_item = pg.TextItem(text, anchor=(0.5, 0.5), color='r', border=pg.mkPen('m', width=1))
+            text_item = pg.TextItem(text, anchor=(0.5, 0.5), color='r')
             text_item.setPos(mid_time, np.max(self.audio_widget.getPlotItem().listDataItems()[0].yData) * 0.9)
             text_item.setFont(QFont("Arial", 12, QFont.Bold))
             self.audio_widget.addItem(text_item)
@@ -1015,7 +1162,7 @@ class AudioAnalyzer(QMainWindow):
             self.audio_widget.removeItem(item[1])
             self.audio_widget.removeItem(item[2])
             self.audio_widget.removeItem(item[3])
-            self.textgrid_annotations.remove(item)
+            self.textgrid_annotations.remove(item)  
         
     def clear_textgrid_annotations(self):
         for item in self.textgrid_annotations:
