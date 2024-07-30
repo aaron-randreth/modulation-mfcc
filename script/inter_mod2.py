@@ -814,6 +814,8 @@ class AudioAnalyzer(QMainWindow):
             panel.secondary_viewbox.addItem(curve)
             panel.getPlotItem().showAxis('right')
             panel.getPlotItem().getAxis('right').setLabel(label)
+            panel.getPlotItem().hideAxis('right')
+
             if isinstance(curve, pg.ScatterPlotItem):
                 curve.sigClicked.connect(self.scatter_plot_clicked)  # Connecte le signal de clic pour ScatterPlotItem
             else:
