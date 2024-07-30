@@ -794,8 +794,12 @@ class AudioAnalyzer(QMainWindow):
             # Première courbe - axe Y gauche
             panel.addItem(curve)
             panel.getPlotItem().getAxis('left').setLabel(label)
-            curve.setCurveClickable(True)
-            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+            if isinstance(curve, pg.ScatterPlotItem):
+                curve.sigClicked.connect(self.scatter_plot_clicked)  # Connecte le signal de clic pour ScatterPlotItem
+            else:
+                if hasattr(curve, 'setCurveClickable'):
+                    curve.setCurveClickable(True)
+                    curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
         elif len(panel.plot_items) == 1:
             # Deuxième courbe - axe Y droite
             if not hasattr(panel, 'secondary_viewbox'):
@@ -810,9 +814,12 @@ class AudioAnalyzer(QMainWindow):
             panel.secondary_viewbox.addItem(curve)
             panel.getPlotItem().showAxis('right')
             panel.getPlotItem().getAxis('right').setLabel(label)
-            panel.getPlotItem().hideAxis('right')
-            curve.setCurveClickable(True)
-            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+            if isinstance(curve, pg.ScatterPlotItem):
+                curve.sigClicked.connect(self.scatter_plot_clicked)  # Connecte le signal de clic pour ScatterPlotItem
+            else:
+                if hasattr(curve, 'setCurveClickable'):
+                    curve.setCurveClickable(True)
+                    curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
         elif len(panel.plot_items) == 2:
             # Troisième courbe - axe Y gauche secondaire (left bis)
             if not hasattr(panel, 'tertiary_viewbox'):
@@ -826,8 +833,12 @@ class AudioAnalyzer(QMainWindow):
                     lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
             panel.tertiary_viewbox.addItem(curve)
             panel.getPlotItem().getAxis('left').setLabel(label)
-            curve.setCurveClickable(True)
-            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+            if isinstance(curve, pg.ScatterPlotItem):
+                curve.sigClicked.connect(self.scatter_plot_clicked)  # Connecte le signal de clic pour ScatterPlotItem
+            else:
+                if hasattr(curve, 'setCurveClickable'):
+                    curve.setCurveClickable(True)
+                    curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
         elif len(panel.plot_items) == 3:
             # Quatrième courbe - axe Y droite secondaire (right bis)
             if not hasattr(panel, 'quaternary_viewbox'):
@@ -841,11 +852,22 @@ class AudioAnalyzer(QMainWindow):
                     lambda: panel.quaternary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
             panel.quaternary_viewbox.addItem(curve)
             panel.getPlotItem().getAxis('right').setLabel(label)
-            curve.setCurveClickable(True)
-            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+            if isinstance(curve, pg.ScatterPlotItem):
+                curve.sigClicked.connect(self.scatter_plot_clicked)  # Connecte le signal de clic pour ScatterPlotItem
+            else:
+                if hasattr(curve, 'setCurveClickable'):
+                    curve.setCurveClickable(True)
+                    curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
 
         panel.plot_items[row] = [curve]
         self.crosshair.add_panel_plot(panel)
+
+    def scatter_plot_clicked(self, plot, points):
+        for point in points:
+            pos = point.pos()
+            x, y = pos.x(), pos.y()
+            print(f"Clicked on ScatterPlotItem at x: {x}, y: {y}")
+            # Ajouter ici le traitement des points cliqués, par exemple ajouter des points max/min
 
 
     def toggle_visibility(self, row, state):
@@ -1402,23 +1424,74 @@ class AudioAnalyzer(QMainWindow):
             panel.setXRange(region[0], region[1], padding=0)
             self.restore_y_ranges(panel)
 
+    def add_derived_curve_to_panel(self, panel, curve, row, label):
+        if not hasattr(panel, 'plot_items'):
+            panel.plot_items = {}
+
+        if len(panel.plot_items) == 0:
+            # Première courbe - axe Y gauche
+            panel.addItem(curve)
+            panel.getPlotItem().getAxis('left').setLabel(label)
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+        elif len(panel.plot_items) == 1:
+            # Deuxième courbe - axe Y droite
+            if not hasattr(panel, 'secondary_viewbox'):
+                panel.secondary_viewbox = pg.ViewBox()
+                panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
+                right_axis = pg.AxisItem('right')
+                panel.getPlotItem().layout.addItem(right_axis, 2, 3)  # Placez l'axe droit correctement
+                right_axis.linkToView(panel.secondary_viewbox)
+                panel.secondary_viewbox.setXLink(panel)
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+            panel.secondary_viewbox.addItem(curve)
+            panel.getPlotItem().showAxis('right')
+            panel.getPlotItem().getAxis('right').setLabel(label)
+            panel.getPlotItem().hideAxis('right')
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+        elif len(panel.plot_items) == 2:
+            # Troisième courbe - axe Y gauche secondaire (left bis)
+            if not hasattr(panel, 'tertiary_viewbox'):
+                panel.tertiary_viewbox = pg.ViewBox()
+                panel.getPlotItem().scene().addItem(panel.tertiary_viewbox)
+                left_axis_2 = pg.AxisItem('left')
+                panel.getPlotItem().layout.addItem(left_axis_2, 2, 0)  # Placez l'axe left bis correctement
+                left_axis_2.linkToView(panel.tertiary_viewbox)
+                panel.tertiary_viewbox.setXLink(panel)
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+            panel.tertiary_viewbox.addItem(curve)
+            panel.getPlotItem().getAxis('left').setLabel(label)
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+        elif len(panel.plot_items) == 3:
+            # Quatrième courbe - axe Y droite secondaire (right bis)
+            if not hasattr(panel, 'quaternary_viewbox'):
+                panel.quaternary_viewbox = pg.ViewBox()
+                panel.getPlotItem().scene().addItem(panel.quaternary_viewbox)
+                right_axis_2 = pg.AxisItem('right')
+                panel.getPlotItem().layout.addItem(right_axis_2, 2, 4)  # Placez l'axe right bis correctement
+                right_axis_2.linkToView(panel.quaternary_viewbox)
+                panel.quaternary_viewbox.setXLink(panel)
+                panel.getPlotItem().getViewBox().sigResized.connect(
+                    lambda: panel.quaternary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
+            panel.quaternary_viewbox.addItem(curve)
+            panel.getPlotItem().getAxis('right').setLabel(label)
+            curve.setCurveClickable(True)
+            curve.sigClicked.connect(lambda plot_item, event: self.add_point_on_click(plot_item, event))  # Connecte le signal de clic
+
+        panel.plot_items[row] = [curve]
+        self.crosshair.add_panel_plot(panel)
+
     def update_derived(self, row, index):
         panel = self.panels[self.dashboard.selected_panel(row)][1]
 
         # Suppression des éléments existants
-        if hasattr(panel, 'plot_items') and row in panel.plot_items:
-            for plot_item in panel.plot_items[row]:
-                if hasattr(panel, 'secondary_viewbox') and plot_item.getViewBox() is panel.secondary_viewbox:
-                    panel.secondary_viewbox.removeItem(plot_item)
-                elif hasattr(panel, 'tertiary_viewbox') and plot_item.getViewBox() is panel.tertiary_viewbox:
-                    panel.tertiary_viewbox.removeItem(plot_item)
-                elif hasattr(panel, 'quaternary_viewbox') and plot_item.getViewBox() is panel.quaternary_viewbox:
-                    panel.quaternary_viewbox.removeItem(plot_item)
-                else:
-                    panel.removeItem(plot_item)
-            del panel.plot_items[row]
+        self.clear_plot_items(row, panel)
 
-        derived_plot = None  # Initialisation de derived_plot
+        derived_plot = None
 
         if index in [1, 2]:  # Dérivée (1: velocity, 2: acceleration)
             combo_box = self.dashboard.cellWidget(row, 0)
@@ -1439,22 +1512,8 @@ class AudioAnalyzer(QMainWindow):
                     label = 'Amplitude Envelope Acceleration'
                 time_axis = np.linspace(start, end, len(y_derived))
 
-                if not hasattr(panel, 'quaternary_viewbox'):
-                    panel.quaternary_viewbox = pg.ViewBox()
-                    panel.getPlotItem().scene().addItem(panel.quaternary_viewbox)
-                    right_axis = pg.AxisItem('right')
-                    panel.getPlotItem().layout.addItem(right_axis, 2, 4)
-                    right_axis.linkToView(panel.quaternary_viewbox)
-                    panel.quaternary_viewbox.setXLink(panel)
-                    panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.quaternary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
-
                 derived_plot = pg.PlotDataItem(time_axis, y_derived, pen='r')
-                panel.quaternary_viewbox.addItem(derived_plot)
-                if not hasattr(panel, 'plot_items'):
-                    panel.plot_items = {}
-                panel.plot_items[row] = [derived_plot]
-                panel.getPlotItem().showAxis('right')
-                panel.getPlotItem().getAxis('right').setLabel(label)
+                self.add_derived_curve_to_panel(panel, derived_plot, row, label)
             else:
                 start, end = self.get_selected_region_interval()
                 if start is None or end is None:
@@ -1470,11 +1529,7 @@ class AudioAnalyzer(QMainWindow):
                         y_derived = np.gradient(np.gradient(y_mfccs))
                         label = 'MFCC Acceleration'
                     derived_plot = pg.PlotDataItem(x_mfccs, y_derived, pen='r')
-                    panel.addItem(derived_plot)
-                    if not hasattr(panel, 'plot_items'):
-                        panel.plot_items = {}
-                    panel.plot_items[row] = [derived_plot]
-                    panel.getPlotItem().getAxis('left').setLabel(label)
+                    self.add_derived_curve_to_panel(panel, derived_plot, row, label)
                 elif original_index in [2, 3, 4]:  # Formants
                     formant_num = original_index - 1
                     f_times, f1_values, f2_values, f3_values = calc_formants(parselmouth.Sound(self.file_path), start, end)
@@ -1495,22 +1550,8 @@ class AudioAnalyzer(QMainWindow):
                         y_derived = np.gradient(np.gradient(formant_values))
                         label = f'{formant_label} Acceleration'
 
-                    if not hasattr(panel, 'secondary_viewbox'):
-                        panel.secondary_viewbox = pg.ViewBox()
-                        panel.getPlotItem().scene().addItem(panel.secondary_viewbox)
-                        right_axis = pg.AxisItem('right')
-                        panel.getPlotItem().layout.addItem(right_axis, 2, 3)
-                        right_axis.linkToView(panel.secondary_viewbox)
-                        panel.secondary_viewbox.setXLink(panel)
-                        panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.secondary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
-
                     derived_plot = pg.ScatterPlotItem(x=f_times, y=y_derived, symbol='o', size=5, pen=pg.mkPen('r'), brush=pg.mkBrush('r'))
-                    panel.secondary_viewbox.addItem(derived_plot)
-                    if not hasattr(panel, 'plot_items'):
-                        panel.plot_items = {}
-                    panel.plot_items[row] = [derived_plot]
-                    panel.getPlotItem().showAxis('right')
-                    panel.getPlotItem().getAxis('right').setLabel(label)
+                    self.add_derived_curve_to_panel(panel, derived_plot, row, label)
                 elif original_index == 5:  # EMA curves
                     file_path, _ = QFileDialog.getOpenFileName(self, "Open EMA File", "", "EMA Files (*.pos)")
                     if not file_path:
@@ -1533,24 +1574,8 @@ class AudioAnalyzer(QMainWindow):
                             label = 'EMA Acceleration'
                         
                         time_axis = time
-                        if not hasattr(panel, 'tertiary_viewbox'):
-                            panel.tertiary_viewbox = pg.ViewBox()
-                            panel.getPlotItem().scene().addItem(panel.tertiary_viewbox)
-                            right_axis = pg.AxisItem('right')
-                            panel.getPlotItem().layout.addItem(right_axis, 2, 3)
-                            right_axis.linkToView(panel.tertiary_viewbox)
-                            panel.tertiary_viewbox.setXLink(panel)
-                            panel.getPlotItem().getViewBox().sigResized.connect(lambda: panel.tertiary_viewbox.setGeometry(panel.getPlotItem().getViewBox().sceneBoundingRect()))
-
                         derived_plot = pg.PlotDataItem(time_axis, y_derived, pen='r')
-                        panel.tertiary_viewbox.addItem(derived_plot)
-                        if not hasattr(panel, 'plot_items'):
-                            panel.plot_items = {}
-                        if row not in panel.plot_items:
-                            panel.plot_items[row] = []
-                        panel.plot_items[row].append(derived_plot)
-                        panel.getPlotItem().showAxis('right')
-                        panel.getPlotItem().getAxis('right').setLabel(label)
+                        self.add_derived_curve_to_panel(panel, derived_plot, row, label)
         
         # Ajouter les connexions de clic
         if derived_plot:
