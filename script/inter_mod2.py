@@ -524,7 +524,7 @@ class AudioAnalyzer(QMainWindow):
         self.manual_peak_removal.setCheckable(True)
         self.analysis_toolbar.addAction(self.manual_peak_maximum_addition)
         self.analysis_toolbar.addAction(self.manual_peak_minimum_addition)
-        # self.analysis_toolbar.addAction(self.manual_peak_removal)
+        self.analysis_toolbar.addAction(self.manual_peak_removal)
         right_layout.addWidget(self.analysis_toolbar)
         right_layout.addStretch(1) 
         main_layout.addLayout(left_layout, 3)  
@@ -1211,8 +1211,8 @@ class AudioAnalyzer(QMainWindow):
         if not filepath:
             return
 
-        min_time = float('inf')
-        max_time = float('-inf')
+        # Get the combined x-axis (time) values from all curves
+        combined_x_values = set()
         for plot_items in panel.plot_items.values():
             for item in plot_items:
                 if isinstance(item, pg.PlotDataItem):
@@ -1220,13 +1220,11 @@ class AudioAnalyzer(QMainWindow):
                 elif isinstance(item, pg.ScatterPlotItem):
                     spots = item.points()
                     x_data = np.array([spot.pos()[0] for spot in spots])
-                    y_data = np.array([spot.pos()[1] for spot in spots])
                 else:
                     continue
-                min_time = min(min_time, x_data.min())
-                max_time = max(max_time, x_data.max())
+                combined_x_values.update(x_data)
 
-        time_axis = np.arange(min_time, max_time, 0.005)
+        time_axis = sorted(combined_x_values)
 
         fieldnames = ['Time']
         all_rows = {round(t, 3): {'Time': round(t, 3)} for t in time_axis}
@@ -1251,30 +1249,30 @@ class AudioAnalyzer(QMainWindow):
                 else:
                     continue
 
-                # Interpoler les valeurs Y pour les pics
+                # Interpolate y values for the unified time axis
                 interpolator = Akima1DInterpolator(x_data, y_data)
                 y_interpolated = interpolator(time_axis)
 
-                # Ajouter les valeurs Y interpolées si sélectionnées
+                # Add the interpolated y values if selected
                 if selections[curve_name]['y_values']:
                     for t, y_val in zip(time_axis, y_interpolated):
                         add_to_all_rows(t, f"{curve_name} Y Values", y_val)
 
-                # Ajouter les valeurs de pic maximales si sélectionnées
+                # Add maximum peak values if selected
                 if selections[curve_name]['max_peaks']:
                     max_finder = MinMaxFinder()
                     x_max, y_max = max_finder.analyse_maximum(x_data, y_data, self.get_selected_region_interval())
                     for x_val, y_val in zip(x_max, y_max):
                         add_to_all_rows(x_val, f"{curve_name} Max Peaks", y_val)
 
-                # Ajouter les valeurs de pic minimales si sélectionnées
+                # Add minimum peak values if selected
                 if selections[curve_name]['min_peaks']:
                     min_finder = MinMaxFinder()
                     x_min, y_min = min_finder.analyse_minimum(x_data, y_data, self.get_selected_region_interval())
                     for x_val, y_val in zip(x_min, y_min):
                         add_to_all_rows(x_val, f"{curve_name} Min Peaks", y_val)
 
-        # Construire les en-têtes en fonction des sélections
+        # Construct the headers based on the selections
         fieldnames.extend([f"{curve_name} Y Values" for curve_name in selections.keys() if selections[curve_name]['y_values']])
         fieldnames.extend([f"{curve_name} Max Peaks" for curve_name in selections.keys() if selections[curve_name]['max_peaks']])
         fieldnames.extend([f"{curve_name} Min Peaks" for curve_name in selections.keys() if selections[curve_name]['min_peaks']])
@@ -1293,7 +1291,6 @@ class AudioAnalyzer(QMainWindow):
             writer.writeheader()
             writer.writerows(sorted_rows)
 
-
     def get_textgrid_interval_text(self, time, interval_name):
         if not self.textgrid_path:
             return ""
@@ -1307,6 +1304,7 @@ class AudioAnalyzer(QMainWindow):
         return ""
 
 
+
     def add_point_on_click(self, plot_item, event):
         pos = event.scenePos()
         if not plot_item.getViewBox().sceneBoundingRect().contains(pos):
@@ -1314,46 +1312,66 @@ class AudioAnalyzer(QMainWindow):
 
         mouse_point = plot_item.getViewBox().mapSceneToView(pos)
         x, y = mouse_point.x(), mouse_point.y()
+        
+        print(f"Mouse clicked at: x={x}, y={y}")  # Debugging line
 
         if self.manual_peak_maximum_addition.isChecked():
             if not hasattr(plot_item, "max_points"):
-                return
+                plot_item.max_points = pg.ScatterPlotItem(pen=pg.mkPen("g"), brush=pg.mkBrush("b"))
+                plot_item.addItem(plot_item.max_points)
 
             points_x, points_y = plot_item.max_points.getData()
-            closest_index = np.argmin(np.abs(points_x - x))
-            points_x = np.insert(points_x, closest_index, x)
-            points_y = np.insert(points_y, closest_index, y)
+            points_x = np.append(points_x, x)
+            points_y = np.append(points_y, y)
 
             plot_item.max_points.setData(points_x, points_y)
             plot_item.max_points.show()
             print("Added max point")
+
         elif self.manual_peak_minimum_addition.isChecked():
             if not hasattr(plot_item, "min_points"):
-                return
+                plot_item.min_points = pg.ScatterPlotItem(pen=pg.mkPen("r"), brush=pg.mkBrush("r"))
+                plot_item.addItem(plot_item.min_points)
 
             points_x, points_y = plot_item.min_points.getData()
-            closest_index = np.argmin(np.abs(points_x - x))
-            points_x = np.insert(points_x, closest_index, x)
-            points_y = np.insert(points_y, closest_index, y)
+            points_x = np.append(points_x, x)
+            points_y = np.append(points_y, y)
+
             plot_item.min_points.setData(points_x, points_y)
             plot_item.min_points.show()
             print("Added min point")
+
         elif self.manual_peak_removal.isChecked():
+            threshold = 0.01  # Ajustez ce seuil selon vos besoins
+            print(f"Removing points near: x={x}, y={y} within threshold {threshold}")  # Debugging line
 
-            if not hasattr(plot_item, "max_points"):
-                return
+            if hasattr(plot_item, "max_points"):
+                points_x, points_y = plot_item.max_points.getData()
+                distances = (points_x - x) ** 2 
+                indices_to_remove = np.where(distances < threshold)[0]
+                print(f"Max points distances: {distances}, indices to remove: {indices_to_remove}")  # Debugging line
+                if indices_to_remove.size > 0:
+                    points_x = np.delete(points_x, indices_to_remove)
+                    points_y = np.delete(points_y, indices_to_remove)
+                    plot_item.max_points.setData(points_x, points_y)
+                    if points_x.size == 0:
+                        plot_item.max_points.hide()
+                    print("Removed max point(s)")
 
-            if not hasattr(plot_item, "min_points"):
-                return
+            if hasattr(plot_item, "min_points"):
+                points_x, points_y = plot_item.min_points.getData()
+                distances = np.sqrt((points_x - x) ** 2 + (points_y - y) ** 2)
+                indices_to_remove = np.where(distances < threshold)[0]
+                print(f"Min points distances: {distances}, indices to remove: {indices_to_remove}")  # Debugging line
+                if indices_to_remove.size > 0:
+                    points_x = np.delete(points_x, indices_to_remove)
+                    points_y = np.delete(points_y, indices_to_remove)
+                    plot_item.min_points.setData(points_x, points_y)
+                    if points_x.size == 0:
+                        plot_item.min_points.hide()
+                    print("Removed min point(s)")
 
-            points_x, points_y = plot_item.max_points.getData()
-            distances = np.sqrt((points_x - x) ** 2 + (points_y - y) ** 2)
-            closest_index = np.argmin(distances)
-            points_x = np.delete(points_x, closest_index)
-            points_y = np.delete(points_y, closest_index)
-            plot_item.max_points.setData(points_x, points_y)
-            plot_item.max_points.show()
-            print("Removed point")
+
     def zoom_in(self):
         selected_panel = int(self.analysis_panel_combo_box.currentText()) - 1
         panel = self.panels[selected_panel][1]
@@ -1385,6 +1403,7 @@ class AudioAnalyzer(QMainWindow):
     def update_derived(self, row, index):
         panel = self.panels[self.dashboard.selected_panel(row)][1]
 
+        # Suppression des éléments existants
         if hasattr(panel, 'plot_items') and row in panel.plot_items:
             for plot_item in panel.plot_items[row]:
                 if hasattr(panel, 'secondary_viewbox') and plot_item.getViewBox() is panel.secondary_viewbox:
@@ -1396,6 +1415,8 @@ class AudioAnalyzer(QMainWindow):
                 else:
                     panel.removeItem(plot_item)
             del panel.plot_items[row]
+
+        derived_plot = None  # Initialisation de derived_plot
 
         if index in [1, 2]:  # Dérivée (1: velocity, 2: acceleration)
             combo_box = self.dashboard.cellWidget(row, 0)
@@ -1528,9 +1549,12 @@ class AudioAnalyzer(QMainWindow):
                         panel.plot_items[row].append(derived_plot)
                         panel.getPlotItem().showAxis('right')
                         panel.getPlotItem().getAxis('right').setLabel(label)
-            
-        else:
-            self.update_panel(row, self.dashboard.cellWidget(row, 0).currentIndex())
+        
+        # Ajouter les connexions de clic
+        if derived_plot:
+            derived_plot.setCurveClickable(True)
+            derived_plot.sigClicked.connect(self.add_point_on_click)
+
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
