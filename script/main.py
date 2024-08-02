@@ -2,6 +2,8 @@ import os
 import sys
 import numpy as np
 
+from abc import ABC, abstractmethod
+
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 
@@ -113,7 +115,9 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         )
         self.panel_choice.addItems(["1", "2", "3", "4"])
         self.visibility_checkbox.setChecked(True)
-        self._derivation_type.addItems(["Traj. (f(x))", "vel. (f(x)')", "acc. (f(x)'')"])
+        self._derivation_type.addItems(
+            ["Traj. (f(x))", "vel. (f(x)')", "acc. (f(x)'')"]
+        )
 
     def lay_out_widgets(self) -> None:
         self.parent.setItemWidget(self, 0, self._curve_type)
@@ -332,17 +336,89 @@ class TierSelection(QtWidgets.QGroupBox):
             btn.deleteLater()
 
 
-class CurveGenerator:
+class DataSource(ABC):
+    """
+    Defines the interface for the curve data calculation.
+    """
 
-    def generate(self, curve_type_id: int, curve_derivation: int) -> None:
-        print(curve_type_id, curve_derivation)
-        # TODO Add the code to create the curves here
+    @abstractmethod
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        """
+        @Returns x_values, y_values
+        """
         pass
 
 
+class Transformation(ABC):
+
+    @abstractmethod
+    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        pass
+
+
+class Trajectory(Transormation):
+
+    @override
+    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return x, y
+
+
+class Velocity(Transformation):
+
+    @override
+    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return x, np.gradient(y)
+
+
+class Acceleration(Transformation):
+
+    @override
+    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return x, np.grandient(np.grandient(y))
+
+
+class Mfcc(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        # TODO
+        audio_data = ...  # lit le fichier à partir de audio data
+        x, y = get_MCCC(
+            audio_data,
+            valeur=12,  # Valeurs par défaut écrit en dure
+            valeur=config["valeur"],
+        )
+
+        return x, y
+
+
+class CurveGenerator:
+    datasources: list[DataSource]
+    derivations: list[Transformation]
+
+    def __init__(
+        # self, datasources: list[DataSources], derivations: list[Transformation]
+        self
+    ) -> None:
+        # self.datasources = datasources
+        # self.derivations = derivations
+
+        self.datasources = [Mfcc()]
+        self.derivations = [Trajectory(), Velocity(), Acceleration()]
+
+    def generate(
+        self, audio_path: str, curve_type_id: int, curve_derivation: int
+    ) -> CalculationValues:
+        source = self.datasources[curve_type_id]
+        operation = self.derivations[curve_derivation]
+
+        data = source.calculate(audio_path)
+        x, y = operation.transform(*data)
+
+        # PLOT
+
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
-    audio_data: Parselmouth | None
     audio_widget: SoundInformation
 
     annotation_path: str | None
@@ -358,7 +434,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.init_main_layout()
 
         self.audio_path = None
-        self.audio_data = None
         self.audio_widget = SoundInformation()
 
         self.annotation_path = None
@@ -506,9 +581,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.audio_indicator.file_loaded(audio_path)
 
         self.audio_path = audio_path
-        self.audio_data = Parselmouth(audio_path)
 
-        self.audio_widget.set_data(self.audio_data)
+        self.audio_widget.set_data(Parselmouth(audio_path))
 
         # self.dashboard_widget.dashboard.reset()
         self.reset_curves()
@@ -532,7 +606,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self, row_id: int, curve_type_id: int, curve_derivation_id: int
     ) -> None:
         old_curve, panel = self.curves[row_id]
-        new_curve = self.curve_generator.generate(curve_type_id, curve_derivation_id)
+        new_curve = self.curve_generator.generate(
+            self.audio_path, curve_type_id, curve_derivation_id
+        )
 
         if panel is None:
             return
@@ -546,6 +622,8 @@ class MainWindow(QtWidgets.QMainWindow):
         curve, current_panel = self.curves[row_id]
         new_panel = self.panels[new_panel_id]
 
+        self.curves[row_id][1] = new_panel
+
         if curve is None:
             return
 
@@ -553,8 +631,6 @@ class MainWindow(QtWidgets.QMainWindow):
             current_panel.panel.remove_curve(curve)
 
         new_panel.panel.add_curve(curve)
-
-        self.curves[row_id][1] = new_panel
 
     def change_curve_color(self, row_id: int, new_color: str) -> None:
         curve, _ = self.curves[row_id]
@@ -580,8 +656,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         assert new_row_id >= 0
         assert new_row_id not in self.curves
+        assert len(self.panels) > 0
 
-        self.curves[new_row_id] = (None, None)
+        self.curves[new_row_id] = (None, self.panels[0])
 
     def reset_curves(self) -> None:
         self.curves.clear()
