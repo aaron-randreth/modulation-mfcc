@@ -260,6 +260,7 @@ class TierSelection(QtWidgets.QGroupBox):
 
     button_group: QtWidgets.QButtonGroup
     tier_checked = QtCore.pyqtSignal(str)
+    tier_clear = QtCore.pyqtSignal()
 
     def __init__(self) -> None:
         super().__init__("Select TextGrid Tier")
@@ -271,7 +272,12 @@ class TierSelection(QtWidgets.QGroupBox):
         self.button_group.setExclusive(True)
         self.button_group.buttonToggled.connect(self._tier_checked)
 
+        self.no_tier_btn =  QtWidgets.QRadioButton("None")
+        self.button_group.addButton(self.no_tier_btn)
+
         self.setLayout(layout)
+        
+        self.layout().addWidget(self.no_tier_btn)
 
     def set_data(self, data: tgt.io.TextGrid) -> None:
         self.reset()
@@ -291,6 +297,10 @@ class TierSelection(QtWidgets.QGroupBox):
         if not checked:
             return
 
+        if button is self.no_tier_btn:
+            self.tier_clear.emit()
+            return
+
         tier_name = button.text()
         self.tier_checked.emit(tier_name)
 
@@ -298,6 +308,9 @@ class TierSelection(QtWidgets.QGroupBox):
         layout = self.layout()
 
         for btn in self.button_group.buttons():
+            if btn is self.no_tier_btn:
+                continue
+
             layout.removeWidget(btn)
             self.button_group.removeButton(btn)
 
@@ -310,7 +323,7 @@ class MainWindow(QtWidgets.QMainWindow):
     audio_widget: SoundInformation
 
     annotation_path: str | None
-    annotation_data: str | None
+    annotation_data: tgt.core.TextGrid | None
     annotation_widget: DisplayInterval
 
     panels: list[PanelWidget]
@@ -342,6 +355,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.textgrid_annotations = []
 
         self.tier_selection.tier_checked.connect(self.display_annotations)
+        self.tier_selection.tier_clear.connect(self.annotation_widget.clear)
         # self.config_mfcc_button.clicked.connect(self.open_mfcc_config)
 
         self.add_control_widget(self.audio_indicator)

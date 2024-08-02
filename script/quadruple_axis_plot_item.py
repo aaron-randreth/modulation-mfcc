@@ -402,12 +402,15 @@ class DisplayInterval:
         self.audio_widget = audio_widget
         self.intervals = []
 
-    def display(self, tier: tgt.core.Tier) -> None:
-        for interval in self.intervals:
-            interval.removed_from_plot_item()
-        self.intervals.clear()
+    def display(self, tier: tgt.core.TextGrid) -> None:
+        self.clear()
 
         for interval in tier:
             interv = Interval(interval, self.audio_widget.sound_plot)
             interv.add_to_plot_item()
             self.intervals.append(interv)
+
+    def clear(self) -> None:
+        for interval in self.intervals:
+            interval.removed_from_plot_item()
+        self.intervals.clear()
