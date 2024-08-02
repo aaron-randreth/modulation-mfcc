@@ -25,9 +25,9 @@ class Spectrogram(pg.ImageItem):
 
     def __init__(
         self,
-        frequency_samples: npt.NDArray[np.float64],
-        time_segments: npt.NDArray[np.float64],
-        spect_data: npt.NDArray[np.float64],
+        frequency_samples: npt.NDArray[np.float64] | None = None,
+        time_segments: npt.NDArray[np.float64] | None = None,
+        spect_data: npt.NDArray[np.float64] | None = None,
         lut: npt.NDArray[np.float64] = defaut_spectrogram_lut,
         zoom_blur: bool = True,
         axisOrder: str = "row-major",
@@ -70,12 +70,28 @@ class Spectrogram(pg.ImageItem):
         if zoom_blur:
             spect_data = scipy.ndimage.zoom(spect_data, 6, order=4)
 
+        super().__init__(
+            axisOrder=axisOrder, lut=lut, **kargs
+        )
+
+        if not (
+            frequency_samples is None or
+            time_segments is None or
+            spect_data is None
+        ):
+            self.set_data(frequency_samples, time_segments, spect_data)
+
+    def set_data(
+        self,
+        frequency_samples: npt.NDArray[np.float64],
+        time_segments: npt.NDArray[np.float64],
+        spect_data: npt.NDArray[np.float64],
+    ) -> None:
+        self.setImage(spect_data)
+
         # Scale the X and Y Axis to time and frequency
         rect = pg.QtCore.QRectF(0, 0, max(time_segments), max(frequency_samples))
-
-        super().__init__(
-            image=spect_data, axisOrder=axisOrder, lut=lut, rect=rect, **kargs
-        )
+        self.setRect(rect)
 
 
 def create_spectrogram_plot(
@@ -86,7 +102,7 @@ def create_spectrogram_plot(
     bottom_label: str = "Temps",
 ) -> pg.PlotDataItem:
 
-    # Create a PlotItem (plot area) for displaying the image
+    # Create a PlotDataItem (plot area) for displaying the image
     plot_item = pg.plot()
 
     # Add labels to the axis

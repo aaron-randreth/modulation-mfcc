@@ -1,12 +1,19 @@
 from typing import override
+from dataclasses import dataclass
 
+from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
+
+from bidict import bidict
+import tgt
+
+from praat_py_ui.parselmouth_calc import Sound, Spectrogram, Parselmouth
+from praat_py_ui import spectrogram as display_spect
 
 class QuadrupleAxisPlotItem(pg.PlotItem):
     central_row: int = 2
     column_count: int = 5
     row_count: int = 4
-
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,7 +51,7 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
             self.layout.setRowMinimumHeight(i, 0)
             self.layout.setRowSpacing(i, 0)
             self.layout.setRowStretchFactor(i, 1)
-            
+
         for i in range(self.column_count):
             self.layout.setColumnPreferredWidth(i, 0)
             self.layout.setColumnMinimumWidth(i, 0)
@@ -66,11 +73,11 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
                     continue
 
                 self.layout.removeItem(item)
-                self.layout.addItem(item, row, col+1)
+                self.layout.addItem(item, row, col + 1)
 
         for axis in self.axes.values():
             row, col = axis["pos"]
-            axis["pos"] = (row, col+1)
+            axis["pos"] = (row, col + 1)
 
     def add_viewboxes_to_scene(self) -> None:
         self.scene().addItem(self.right)
@@ -86,12 +93,12 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
         self.axes["left_bis"] = {
             "item": left_bis_axis,
             "pos": (self.central_row, 0),
-            "vb": self.left_bis
+            "vb": self.left_bis,
         }
         self.axes["right_bis"] = {
             "item": right_bis_axis,
             "pos": (self.central_row, self.column_count - 1),
-            "vb": self.right_bis
+            "vb": self.right_bis,
         }
 
         right_axis.linkToView(self.right)
@@ -125,7 +132,7 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
     def add_item(
         self,
         axis_id: str,
-        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem
+        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem,
     ) -> None:
         if axis_id not in self.axes:
             raise ValueError(f"The axis {axis_id} does not exist.")
@@ -142,7 +149,7 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
     def remove_item(
         self,
         axis_id: str,
-        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem
+        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem,
     ) -> None:
         if axis_id not in self.axes:
             raise ValueError(f"The axis {axis_id} does not exist.")
@@ -161,11 +168,24 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
         if items_count == 0:
             axis.hide()
 
+
+@dataclass
+class CalculationValues:
+    curve: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem
+    min: pg.ScatterPlotItem
+    max: pg.ScatterPlotItem
+
+    def __hash__(self) -> int:
+        return hash(self.curve)
+
+
 # TODO Find a way for the dashboard to find their item when deleting
 # 1) Store the item in dashboard ? Or,
 # 2) Store the dashboard line id in the panel
 class Panel(QuadrupleAxisPlotItem):
     item_count: int
+    rotation_axes: tuple[str]
+    rotation: bidict[str, CalculationValues]
 
     def __init__(
         self,
@@ -174,37 +194,31 @@ class Panel(QuadrupleAxisPlotItem):
 
         self.item_count = 0
 
-        self.rotation = {
-            "left": None,
-            "right": None,
-            "left_bis": None,
-            "right_bis": None,
-        }
+        self.rotation_axes = (
+            "left",
+            "right",
+            "left_bis",
+            "right_bis",
+        )
+
+        self.rotation = bidict()
+
+        self.setLimits(xMin=0)
 
     def get_free_axis(self) -> str | None:
-        for axis_id, axis_item in self.rotation.items():
-            if axis_item is None:
+        for axis_id in self.rotation_axes:
+            if axis_id not in self.rotation:
                 return axis_id
 
         return None
 
-    def get_item_axis(
-        self,
-        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem
-    ) -> str | None:
-        for axis_id, axis_item in self.rotation.items():
-            if axis_item is None:
-                continue
+    def get_item_axis(self, item: CalculationValues) -> str | None:
+        if item not in self.rotation.inverse:
+            return None
 
-            if axis_item is item:
-                return axis_id
+        return self.rotation.inverse[item]
 
-        return None
-
-    def add_item(
-        self,
-        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem,
-    ) -> None:
+    def add_curve(self, item: CalculationValues) -> None:
         if self.item_count >= 4:
             raise ValueError("This Panel already has 4 curves")
 
@@ -215,17 +229,185 @@ class Panel(QuadrupleAxisPlotItem):
             raise ValueError("This Panel already has 4 curves")
 
         self.rotation[axis_to_be_added_to] = item
-        super().add_item(axis_to_be_added_to, item)
 
-    def remove_item(
-        self,
-        item: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem,
-    ) -> None:
+        super().add_item(axis_to_be_added_to, item.curve)
+        super().add_item(axis_to_be_added_to, item.min)
+        super().add_item(axis_to_be_added_to, item.max)
+
+    def remove_curve(self, item: CalculationValues) -> None:
         if self.item_count == 0:
             raise ValueError("This Panel does not have any curves")
 
         self.item_count -= 1
-        axis_to_be_removed_from = self.get_item_axis(item)
-        self.rotation[axis_to_be_removed_from] = None
 
-        super().remove_item(axis_to_be_removed_from, item)
+        axis_to_be_removed_from = self.get_item_axis(item)
+        if axis_to_be_removed_from is None:
+            raise ValueError("This curve is is not displayed in any axis")
+
+        self.rotation.pop(axis_to_be_removed_from)
+
+        super().remove_item(axis_to_be_removed_from, item.curve)
+        super().remove_item(axis_to_be_removed_from, item.min)
+        super().remove_item(axis_to_be_removed_from, item.max)
+
+
+class PanelWidget(QtWidgets.QWidget):
+    id: int
+    panel: Panel
+
+    def __init__(self, id: int) -> None:
+        super().__init__()
+
+        label = QtWidgets.QLabel(f"Panel {id}")
+        plot_widget = pg.PlotWidget()
+
+        layout = QtWidgets.QVBoxLayout()
+
+        self.panel = Panel()
+
+        plot_widget.setCentralItem(self.panel)
+        self.panel.add_viewboxes_to_scene()
+
+        layout.addWidget(label)
+        layout.addWidget(plot_widget)
+
+        self.setLayout(layout)
+
+
+class SoundInformation(pg.GraphicsLayoutWidget):
+    sound_data: Sound
+    spectrogram_data: Spectrogram
+
+    selection_region: pg.LinearRegionItem
+
+    sound_plot: pg.PlotItem
+    spectrogram_plot: pg.PlotItem
+
+    sound_plot_data_item: pg.PlotDataItem
+    spectrogram_image_item: pg.ImageItem
+
+    reference_viewbox: pg.ViewBox
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.selection_region = pg.LinearRegionItem(swapMode="sort")
+
+        self.sound_plot = pg.PlotItem()
+        self.spectrogram_plot = pg.PlotItem()
+
+        self.sound_plot.addItem(self.selection_region)
+        self.sound_plot_data_item = self.sound_plot.plot()
+        self.selection_region.setClipItem(self.sound_plot_data_item)
+
+        self.spectrogram_image_item = display_spect.Spectrogram(zoom_blur=False)
+        self.spectrogram_plot.addItem(self.spectrogram_image_item)
+
+        self.reference_viewbox = self.sound_plot.getViewBox()
+
+        self.sound_plot.setMouseEnabled(x=True, y=False)
+        self.spectrogram_plot.setMouseEnabled(x=True, y=False)
+
+        self.sound_plot.setLimits(xMin=0, yMin=-0.2, yMax=0.2)
+        self.spectrogram_plot.setLimits(xMin=0, yMin=0, yMax=5000)
+        self.spectrogram_plot.setRange(yRange=(0, 5000))
+
+        self.sound_plot.setXLink(self.spectrogram_plot)
+        self.spectrogram_plot.setXLink(self.sound_plot)
+
+        self.selection_region.hide()
+        self.spectrogram_plot.hide()
+        self.setMinimumHeight(150)
+
+        self.addItem(self.sound_plot)
+        self.nextRow()
+        self.addItem(self.spectrogram_plot)
+
+    def toggle_spectrogram(self, show: bool) -> None:
+        if show:
+            self.spectrogram_plot.show()
+        else:
+            self.spectrogram_plot.hide()
+
+    def set_data(self, data: Parselmouth) -> None:
+        self.selection_region.show()
+
+        sound = data.get_sound()
+        spectrogram = data.get_spectrogram()
+
+        self.sound_plot_data_item.setData(sound.timestamps, sound.amplitudes[0])
+
+        self.sound_plot.setLimits(xMin=0, xMax=sound.timestamps[-1])
+
+        self.spectrogram_plot.setLimits(xMin=0, xMax=sound.timestamps[-1])
+
+        self.sound_plot.autoRange()
+        self.spectrogram_image_item.set_data(
+            spectrogram.frequencies, spectrogram.timestamps, spectrogram.data_matrix
+        )
+
+class Interval:
+    name: str
+    parent_plot: pg.PlotItem
+
+    start_line: pg.InfiniteLine
+    end_line: pg.InfiniteLine
+    text_item: pg.TextItem
+
+    def __init__(
+        self,
+        interval: tgt.core.Interval,
+        parent_plot: pg.PlotItem
+    ) -> None:
+
+        self.name = interval.text
+        self.parent_plot = parent_plot
+
+        self.start_line = pg.InfiniteLine(
+            pos=interval.start_time,
+            angle=90,
+            pen=pg.mkPen("m", style=QtCore.Qt.DashLine, width=2),
+        )
+
+        self.end_line = pg.InfiniteLine(
+            pos=interval.end_time,
+            angle=90,
+            pen=pg.mkPen("m", style=QtCore.Qt.DashLine, width=2),
+        )
+
+        mid_time = (interval.start_time + interval.end_time) / 2
+        ymax = max(self.parent_plot.listDataItems()[0].yData) 
+        
+        self.text_item = pg.TextItem(interval.text, anchor=(0.5, 0.5), color="r")
+        self.text_item.setPos(mid_time, ymax * 0.9)
+        self.text_item.setFont(QtGui.QFont("Arial", 12, QtGui.QFont.Bold))
+
+    def add_to_plot_item(self) -> None:
+        self.parent_plot.addItem(self.start_line)
+        self.parent_plot.addItem(self.end_line)
+        self.parent_plot.addItem(self.text_item)
+
+    def removed_from_plot_item(self) -> None:
+        self.parent_plot.removeItem(self.start_line)
+        self.parent_plot.removeItem(self.end_line)
+        self.parent_plot.removeItem(self.text_item)
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+class DisplayInterval:
+    audio_widget: SoundInformation
+    intervals: list[Interval]
+
+    def __init__(self, audio_widget: SoundInformation) -> None:
+        self.audio_widget = audio_widget
+        self.intervals = []
+
+    def display(self, tier: tgt.core.Tier) -> None:
+        for interval in self.intervals:
+            interval.removed_from_plot_item()
+        self.intervals.clear()
+
+        for interval in tier:
+            interv = Interval(interval, self.audio_widget.sound_plot)
+            interv.add_to_plot_item()
+            self.intervals.append(interv)

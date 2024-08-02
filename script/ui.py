@@ -168,3 +168,73 @@ class MinMaxAnalyser(QtWidgets.QWidget):
             self.max_points.setData(points_x, points_y)
             self.max_points.show()
             print("Removed point")
+
+class ZoomToolbar(QtWidgets.QToolBar):
+
+    def __init__(self, selection: pg.LinearRegionItem, scale: float = 0.9) -> None:
+        super().__init__('Zoom Toolbar')
+
+        # < 1 for in and > 1 for out
+        self.scale = scale
+        self.selection = selection
+        self.viewboxes: list[QtWidgets.ViewBox] = []
+
+        # Add Zoom In button
+        self.zoom_in_action = QtWidgets.QAction('Zoom In', self)
+        self.zoom_in_action.setStatusTip('Zoom in')
+        self.addAction(self.zoom_in_action)
+
+        # Add Zoom Out button
+        self.zoom_out_action = QtWidgets.QAction('Zoom Out', self)
+        self.zoom_out_action.setStatusTip('Zoom out')
+        self.addAction(self.zoom_out_action)
+
+        # Zoom in by 10% (0.9) and out by 10% (1.1) by default
+        self.zoom_in_action.triggered.connect(
+            lambda: self.handle_plot_zoom_buttons(self.scale)
+        )
+        self.zoom_out_action.triggered.connect(
+            lambda: self.handle_plot_zoom_buttons(1 / self.scale)
+        )
+
+        # Add Zoom to Selection button
+        self.zoom_selection_action = QtWidgets.QAction('Zoom to Selection', self)
+        self.zoom_selection_action.setStatusTip('Zoom to selection')
+        self.zoom_selection_action.triggered.connect(self.zoom_to_selection)
+        self.addAction(self.zoom_selection_action)
+
+        # Add Reset Zoom button
+        self.reset_zoom_action = QtWidgets.QAction('Reset Zoom', self)
+        self.reset_zoom_action.setStatusTip('Reset zoom to original')
+        self.reset_zoom_action.triggered.connect(self.reset_zoom)
+        self.addAction(self.reset_zoom_action)
+
+    def link_viewbox(self, viewbox_or_plot: pg.ViewBox | pg.PlotWidget | pg.PlotItem) -> None:
+        """Link a ViewBox, PlotWidget, or PlotItem to the zoom toolbar."""
+        if isinstance(viewbox_or_plot, pg.PlotWidget):
+            viewbox = viewbox_or_plot.getViewBox()
+        elif isinstance(viewbox_or_plot, pg.PlotItem):
+            viewbox = viewbox_or_plot.getViewBox()
+        elif isinstance(viewbox_or_plot, pg.ViewBox):
+            viewbox = viewbox_or_plot
+        else:
+            raise TypeError("Argument must be a ViewBox, PlotWidget, or PlotItem")
+
+        self.viewboxes.append(viewbox)
+
+    def handle_plot_zoom_buttons(self, factor: float) -> None:
+        """Zoom on the abscissa (x-axis) on all linked viewboxes."""
+        for vb in self.viewboxes:
+            vb.scaleBy((factor, 1))  # Zoom only on the x-axis
+
+    def zoom_to_selection(self) -> None:
+        """Zoom to the selected region defined by the LinearRegionItem."""
+        region = self.selection.getRegion()
+        for vb in self.viewboxes:
+            vb.setXRange(region[0], region[1], padding=0)
+
+    def reset_zoom(self) -> None:
+        """Reset the zoom to the original view."""
+        for vb in self.viewboxes:
+            vb.autoRange()
+
