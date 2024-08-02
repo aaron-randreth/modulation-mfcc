@@ -14,7 +14,7 @@ from quadruple_axis_plot_item import (
     CalculationValues,
     PanelWidget,
     SoundInformation,
-    DisplayInterval
+    DisplayInterval,
 )
 
 
@@ -98,49 +98,60 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         self.setup_signals()
 
     def create_widgets(self) -> None:
-        self.curve_combobox = QtWidgets.QComboBox()
-        self.ema_button = QtWidgets.QPushButton(f"Button {self.id+1},{2}")
+        self._curve_type = QtWidgets.QComboBox()
+        self.ema_type = QtWidgets.QPushButton(f"Button {self.id+1},{2}")
         self.color_selection = ColorSelection()
         self.panel_choice = QtWidgets.QComboBox()
         self.visibility_checkbox = QtWidgets.QCheckBox()
-        self.derived_combo_box = QtWidgets.QComboBox()
+        self._derivation_type = QtWidgets.QComboBox()
 
-        self.curve_combobox.addItems(
+        self._curve_type.addItems(
             ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "Courbes ema", "ENV_AMP"]
         )
-        self.ema_button.setStyleSheet(
+        self.ema_type.setStyleSheet(
             "background-color: lightblue; border: 1px solid black; padding: 5px"
         )
         self.panel_choice.addItems(["1", "2", "3", "4"])
         self.visibility_checkbox.setChecked(True)
-        self.derived_combo_box.addItems(
-            ["Traj. (f(x))", "vel. (f(x)')", "acc. (f(x)'')"]
-        )
+        self._derivation_type.addItems(["Traj. (f(x))", "vel. (f(x)')", "acc. (f(x)'')"])
 
     def lay_out_widgets(self) -> None:
-        self.parent.setItemWidget(self, 0, self.curve_combobox)
-        self.parent.setItemWidget(self, 1, self.ema_button)
+        self.parent.setItemWidget(self, 0, self._curve_type)
+        self.parent.setItemWidget(self, 1, self.ema_type)
         self.parent.setItemWidget(self, 2, self.color_selection)
         self.parent.setItemWidget(self, 3, self.panel_choice)
         self.parent.setItemWidget(self, 4, self.visibility_checkbox)
-        self.parent.setItemWidget(self, 5, self.derived_combo_box)
+        self.parent.setItemWidget(self, 5, self._derivation_type)
 
     def setup_signals(self) -> None:
-        self.update_panel = self.curve_combobox.currentIndexChanged
-        self.toggle_visibility = self.visibility_checkbox.stateChanged
-        self.change_curve_color = self.color_selection.color_chosen
-        self.update_derived = self.derived_combo_box.currentIndexChanged
+        self.curve_type_changed = self._curve_type.currentIndexChanged
+        # self.ema_type_changed = self.ema_type.currentIndexChanged
+        self.color_changed = self.color_selection.color_chosen
+        self.panel_changed = self.panel_choice.currentIndexChanged
+        self.visibility_changed = self.visibility_checkbox.stateChanged
+        self.derivation_type_changed = self._derivation_type.currentIndexChanged
+
+    @property
+    def curve_type(self) -> int:
+        return self._curve_type.currentIndex()
 
     @property
     def selected_panel(self) -> int:
         return self.panel_choice.currentIndex()
 
+    @property
+    def derivation_type(self) -> None:
+        return self._derivation_type.currentIndex()
+
 
 class Dashboard(QtWidgets.QTreeWidget):
-    update_panel = QtCore.pyqtSignal(int, int)
-    toggle_visibility = QtCore.pyqtSignal(int, int)
-    change_curve_color = QtCore.pyqtSignal(int, str)
-    update_derived = QtCore.pyqtSignal(int, int)
+    curve_type_changed = QtCore.pyqtSignal(int, int)
+    color_changed = QtCore.pyqtSignal(int, int)
+    panel_changed = QtCore.pyqtSignal(int, int)
+    visibility_changed = QtCore.pyqtSignal(int, int)
+    derivation_type_changed = QtCore.pyqtSignal(int, int)
+
+    update_curve = QtCore.pyqtSignal(int, int, int)
 
     row_count: int
     headers: list[str]
@@ -155,27 +166,30 @@ class Dashboard(QtWidgets.QTreeWidget):
         self.setHeaderLabels(self.headers)
         self.resize_column()
 
-        for _ in range(4):
-            self.append_row()
+        # for _ in range(4):
+        #     self.append_row()
 
     def resize_column(self) -> None:
         self.setColumnWidth(self.headers.index("EMA"), 90)
         self.setColumnWidth(self.headers.index("Panel"), 50)
         self.setColumnWidth(self.headers.index("Show"), 20)
 
+    def _update_curve(self, item: TreeWidgetItem) -> None:
+        self.update_curve.emit(item.id, item.curve_type, item.derivation_type)
+
     def append_row(self) -> None:
         item = TreeWidgetItem(self, self.row_count)
-        item.update_panel.connect(
-            lambda index, row=item.id: self.update_panel.emit(row, index)
+        item.curve_type_changed.connect(lambda _: self._update_curve(item))
+        item.derivation_type_changed.connect(lambda _: self._update_curve(item))
+
+        item.color_changed.connect(
+            lambda color, row=item.id: self.color_changed.emit(row, color)
         )
-        item.toggle_visibility.connect(
-            lambda state, row=item.id: self.toggle_visibility.emit(row, state)
+        item.panel_changed.connect(
+            lambda index, row=item.id: self.panel_changed.emit(row, index)
         )
-        item.change_curve_color.connect(
-            lambda color, row=item.id: self.change_curve_color.emit(row, color)
-        )
-        item.update_derived.connect(
-            lambda index, row=item.id: self.update_derived.emit(row, index)
+        item.visibility_changed.connect(
+            lambda state, row=item.id: self.visibility_changed.emit(row, state)
         )
 
         self.addTopLevelItem(item)
@@ -192,13 +206,15 @@ class Dashboard(QtWidgets.QTreeWidget):
 
 class DashboardWidget(QtWidgets.QWidget):
     dashboard: Dashboard
+    row_added = QtCore.pyqtSignal(int)
 
     def __init__(self) -> None:
         super().__init__()
 
         self.dashboard = Dashboard()
+
         add_row_button = StyledButton("+", "lightgreen")
-        add_row_button.clicked.connect(self.dashboard.append_row)
+        add_row_button.clicked.connect(self._row_added)
 
         layout = QtWidgets.QVBoxLayout()
 
@@ -206,6 +222,10 @@ class DashboardWidget(QtWidgets.QWidget):
         layout.addWidget(add_row_button)
 
         self.setLayout(layout)
+
+    def _row_added(self) -> None:
+        self.dashboard.append_row()
+        self.row_added.emit(self.dashboard.row_count)
 
 
 class FileLoadIndicator(QtWidgets.QGroupBox):
@@ -256,8 +276,6 @@ class StyledButton(QtWidgets.QPushButton):
 
 
 class TierSelection(QtWidgets.QGroupBox):
-    textgrid_data: tgt.io.TextGrid | None
-
     button_group: QtWidgets.QButtonGroup
     tier_checked = QtCore.pyqtSignal(str)
     tier_clear = QtCore.pyqtSignal()
@@ -265,24 +283,21 @@ class TierSelection(QtWidgets.QGroupBox):
     def __init__(self) -> None:
         super().__init__("Select TextGrid Tier")
 
-        textgrid_data = None
         layout = QtWidgets.QVBoxLayout()
 
         self.button_group = QtWidgets.QButtonGroup(self)
         self.button_group.setExclusive(True)
         self.button_group.buttonToggled.connect(self._tier_checked)
 
-        self.no_tier_btn =  QtWidgets.QRadioButton("None")
+        self.no_tier_btn = QtWidgets.QRadioButton("None")
         self.button_group.addButton(self.no_tier_btn)
 
         self.setLayout(layout)
-        
+
         self.layout().addWidget(self.no_tier_btn)
 
     def set_data(self, data: tgt.io.TextGrid) -> None:
         self.reset()
-
-        self.textgrid_data = data
 
         self.populate_textgrid_selection(data.get_tier_names())
 
@@ -317,6 +332,14 @@ class TierSelection(QtWidgets.QGroupBox):
             btn.deleteLater()
 
 
+class CurveGenerator:
+
+    def generate(self, curve_type_id: int, curve_derivation: int) -> None:
+        print(curve_type_id, curve_derivation)
+        # TODO Add the code to create the curves here
+        pass
+
+
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
     audio_data: Parselmouth | None
@@ -327,6 +350,8 @@ class MainWindow(QtWidgets.QMainWindow):
     annotation_widget: DisplayInterval
 
     panels: list[PanelWidget]
+    # ["row_id": (curve_id, panel_id)]
+    curves: dict[int, list[int, int]]
 
     def __init__(self) -> None:
         super().__init__()
@@ -340,7 +365,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_data = None
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
+        self.curve_generator = CurveGenerator()
         self.dashboard_widget = DashboardWidget()
+
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -352,11 +379,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tier_selection = TierSelection()
         self.config_mfcc_button = StyledButton("Configure")
 
-        self.textgrid_annotations = []
-
-        self.tier_selection.tier_checked.connect(self.display_annotations)
+        self.tier_selection.tier_checked.connect(
+            lambda tier_name: self.annotation_widget.display(
+                self.annotation_data.get_tier_by_name(tier_name)
+            )
+        )
         self.tier_selection.tier_clear.connect(self.annotation_widget.clear)
         # self.config_mfcc_button.clicked.connect(self.open_mfcc_config)
+
+        self.dashboard_widget.row_added.connect(self.handle_new_row)
+
+        self.dashboard_widget.dashboard.update_curve.connect(self.update_curve)
+        self.dashboard_widget.dashboard.color_changed.connect(self.change_curve_color)
+        self.dashboard_widget.dashboard.panel_changed.connect(self.change_curve_panel)
+        self.dashboard_widget.dashboard.visibility_changed.connect(
+            self.change_curve_visibility
+        )
 
         self.add_control_widget(self.audio_indicator)
         self.add_control_widget(self.annotation_indicator)
@@ -370,6 +408,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.add_curve_widget(self.audio_widget)
 
+        self.curves = {}
         self.panels = []
 
         for i in range(4):
@@ -471,6 +510,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.audio_widget.set_data(self.audio_data)
 
+        # self.dashboard_widget.dashboard.reset()
+        self.reset_curves()
+
     def load_annotations(self) -> None:
         annotation_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)"
@@ -486,9 +528,65 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tier_selection.set_data(self.annotation_data)
 
-    def display_annotations(self, tier_name):
-        tier = self.annotation_data.get_tier_by_name(tier_name)
-        self.annotation_widget.display(tier)
+    def update_curve(
+        self, row_id: int, curve_type_id: int, curve_derivation_id: int
+    ) -> None:
+        old_curve, panel = self.curves[row_id]
+        new_curve = self.curve_generator.generate(curve_type_id, curve_derivation_id)
+
+        if panel is None:
+            return
+
+        if old_curve is not None:
+            panel.panel.remove_curve(old_curve)
+
+        panel.panel.add_curve(new_curve)
+
+    def change_curve_panel(self, row_id: int, new_panel_id: int) -> None:
+        curve, current_panel = self.curves[row_id]
+        new_panel = self.panels[new_panel_id]
+
+        if curve is None:
+            return
+
+        if current_panel is not None:
+            current_panel.panel.remove_curve(curve)
+
+        new_panel.panel.add_curve(curve)
+
+        self.curves[row_id][1] = new_panel
+
+    def change_curve_color(self, row_id: int, new_color: str) -> None:
+        curve, _ = self.curves[row_id]
+
+        if curve is None:
+            return
+
+        curve.setPen(color=new_color)
+
+    def change_curve_visibility(self, row_id: int, is_visible: bool) -> None:
+        curve, _ = self.curves[row_id]
+
+        if curve is None:
+            return
+
+        if is_visible:
+            curve.show()
+        else:
+            curve.hide()
+
+    def handle_new_row(self, row_count: int) -> None:
+        new_row_id = row_count - 1
+
+        assert new_row_id >= 0
+        assert new_row_id not in self.curves
+
+        self.curves[new_row_id] = (None, None)
+
+    def reset_curves(self) -> None:
+        self.curves.clear()
+        for panel in self.panels:
+            panel.panel.reset()
 
 
 if __name__ == "__main__":

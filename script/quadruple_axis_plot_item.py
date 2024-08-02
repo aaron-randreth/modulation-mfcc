@@ -250,6 +250,9 @@ class Panel(QuadrupleAxisPlotItem):
         super().remove_item(axis_to_be_removed_from, item.min)
         super().remove_item(axis_to_be_removed_from, item.max)
 
+    def reset(self) -> None:
+        for item in self.rotation.inverse.keys():
+            self.remove_curve(item)
 
 class PanelWidget(QtWidgets.QWidget):
     id: int
