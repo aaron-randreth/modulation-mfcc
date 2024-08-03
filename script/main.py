@@ -8,6 +8,10 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 
 import tgt
+import parselmouth
+
+from mfcc import load_channel, get_MFCCS_change
+from calc import calc_formants
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (

@@ -23,7 +23,7 @@ import pyqtgraph as pg
 import parselmouth
 import tgt
 from praat_py_ui import tiers as ui_tiers, textgridtools as ui_tgt, spectrogram as specto, parselmouth_calc as calc
-from datasources.mfcc import load_channel, get_MFCCS_change
+from mfcc import load_channel, get_MFCCS_change
 from scrollable_window import Info, InfoBox, Output
 from calc import calc_formants, MinMaxFinder, read_AG50x, calculate_amplitude_envelope
 from ui import create_plot_widget, SelectableListDialog, Crosshair, MinMaxAnalyser
