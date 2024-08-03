@@ -14,7 +14,7 @@ import tgt
 from scipy.io import wavfile
 
 from mfcc import load_channel, get_MFCCS_change
-from calc import calc_formants, calculate_amplitude_envelope
+from calc import calc_formants, calculate_amplitude_envelope, get_f0
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
@@ -115,7 +115,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         self._derivation_type = QtWidgets.QComboBox()
 
         self._curve_type.addItems(
-            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "Courbes ema", "ENV_AMP"]
+            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]  # Add F0 here
         )
         self.ema_type.setStyleSheet(
             "background-color: lightblue; border: 1px solid black; padding: 5px"
@@ -441,12 +441,17 @@ class AmplitudeEnvelope(DataSource):
         sample_rate, audio_signal = wavfile.read(audio_path)
 
         # audio_signal = audio_signal[int(start * sample_rate):int(end * sample_rate)]
-        duration = len(audio_signal) / sample_rate
+        amplitude_envelope,time_axis = calculate_amplitude_envelope(audio_signal, sample_rate)
 
-        amplitude_envelope = calculate_amplitude_envelope(audio_signal, sample_rate)
-        time_axis = np.linspace(0, duration, len(amplitude_envelope))
 
         return time_axis, amplitude_envelope
+class F0(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        sample_rate, audio_signal = wavfile.read(audio_path)
+        f0, f0_times = get_f0(audio_signal, sample_rate)
+        return f0_times, f0
 
 
 class Plotter(ABC):
@@ -488,20 +493,14 @@ class CurveGenerator:
     derivations: list[Transformation]
     plotters: list[Plotter]
 
-    def __init__(
-        # self, datasources: list[DataSources], derivations: list[Transformation]
-        self,
-    ) -> None:
-        # self.datasources = datasources
-        # self.derivations = derivations
-
+    def __init__(self) -> None:
         self.datasources = [
             None,
             Mfcc(),
             Formant1(),
             Formant2(),
             Formant3(),
-            None,
+            F0(),  # Add the new F0 data source here
             AmplitudeEnvelope(),
         ]
         self.derivations = [Trajectory(), Velocity(), Acceleration()]
@@ -511,7 +510,7 @@ class CurveGenerator:
             ScatterPlotPlotter(),
             ScatterPlotPlotter(),
             ScatterPlotPlotter(),
-            None,
+            CurvePlotter(),  # Assuming F0 uses a CurvePlotter
             CurvePlotter(),
         ]
 
@@ -521,8 +520,7 @@ class CurveGenerator:
         source = self.datasources[curve_type_id]
 
         if source is None:
-            # TODO
-            return
+            return None
 
         operation = self.derivations[curve_derivation]
         plotter = self.plotters[curve_type_id]
@@ -531,7 +529,6 @@ class CurveGenerator:
         x, y = operation.transform(*data)
 
         return plotter.plot(x, y)
-
 
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
