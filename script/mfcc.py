@@ -84,6 +84,5 @@ def get_MFCCS_change(
 
     values = totChange
     times = np.arange(len(totChange)) * tStep
-    print(times)
 
     return times, values

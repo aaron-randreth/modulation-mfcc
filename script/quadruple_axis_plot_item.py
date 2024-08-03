@@ -165,9 +165,8 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
         items_count -= 1
         self.axes[axis_id]["items_count"] = items_count
 
-        if items_count == 0:
+        if items_count == 0 and axis_id != "left":
             axis.hide()
-
 
 @dataclass
 class CalculationValues:
@@ -178,6 +177,15 @@ class CalculationValues:
     def __hash__(self) -> int:
         return hash(self.curve)
 
+    def hide(self) -> None:
+        self.curve.hide()
+        self.min.hide()
+        self.max.hide()
+
+    def show(self) -> None:
+        self.curve.show()
+        self.min.show()
+        self.max.show()
 
 # TODO Find a way for the dashboard to find their item when deleting
 # 1) Store the item in dashboard ? Or,

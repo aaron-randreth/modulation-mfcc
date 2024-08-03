@@ -3,15 +3,18 @@ import sys
 import numpy as np
 
 from abc import ABC, abstractmethod
+from typing import override
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 
-import tgt
 import parselmouth
+import tgt
+
+from scipy.io import wavfile
 
 from mfcc import load_channel, get_MFCCS_change
-from calc import calc_formants
+from calc import calc_formants, calculate_amplitude_envelope
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
@@ -154,7 +157,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
 
 class Dashboard(QtWidgets.QTreeWidget):
     curve_type_changed = QtCore.pyqtSignal(int, int)
-    color_changed = QtCore.pyqtSignal(int, int)
+    color_changed = QtCore.pyqtSignal(int, str)
     panel_changed = QtCore.pyqtSignal(int, int)
     visibility_changed = QtCore.pyqtSignal(int, int)
     derivation_type_changed = QtCore.pyqtSignal(int, int)
@@ -360,7 +363,7 @@ class Transformation(ABC):
         pass
 
 
-class Trajectory(Transormation):
+class Trajectory(Transformation):
 
     @override
     def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -378,48 +381,157 @@ class Acceleration(Transformation):
 
     @override
     def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        return x, np.grandient(np.grandient(y))
+        return x, np.gradient(np.gradient(y))
+
+
+class Soundwave(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        a = Parselmouth(audio_path)
+        s = a.get_sound()
+
+        return s.timestamps, s.amplitudes[0]
 
 
 class Mfcc(DataSource):
 
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
-        # TODO
-        audio_data = ...  # lit le fichier à partir de audio data
-        x, y = get_MCCC(
-            audio_data,
-            valeur=12,  # Valeurs par défaut écrit en dure
-            valeur=config["valeur"],
-        )
+        data = load_channel(audio_path)
+        x, y = get_MFCCS_change(data)
 
         return x, y
 
 
+class Formant1(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        f_times, f1_values, _, _ = calc_formants(
+            parselmouth.Sound(audio_path), 0, 99999, 40
+        )
+        return f_times, f1_values
+
+
+class Formant2(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        f_times, _, f2_values, _ = calc_formants(
+            parselmouth.Sound(audio_path), 0, 99999, 40
+        )
+        return f_times, f2_values
+
+
+class Formant3(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        f_times, _, _, f3_values = calc_formants(
+            parselmouth.Sound(audio_path), 0, 99999, 40
+        )
+        return f_times, f3_values
+
+
+class AmplitudeEnvelope(DataSource):
+
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        sample_rate, audio_signal = wavfile.read(audio_path)
+
+        # audio_signal = audio_signal[int(start * sample_rate):int(end * sample_rate)]
+        duration = len(audio_signal) / sample_rate
+
+        amplitude_envelope = calculate_amplitude_envelope(audio_signal, sample_rate)
+        time_axis = np.linspace(0, duration, len(amplitude_envelope))
+
+        return time_axis, amplitude_envelope
+
+
+class Plotter(ABC):
+
+    @abstractmethod
+    def plot(self, x: np.ndarray, y: np.ndarray) -> CalculationValues:
+        pass
+        f_times, _, _, f2_values = calc_formants(
+            parselmouth.Sound(audio_path), 0, 99999
+        )
+        return f_times, f2_values
+
+
+class CurvePlotter(Plotter):
+
+    @override
+    def plot(self, x: np.ndarray, y: np.ndarray) -> CalculationValues:
+        curve = pg.PlotDataItem(x=x, y=y)
+        min = pg.ScatterPlotItem()
+        max = pg.ScatterPlotItem()
+
+        return CalculationValues(curve, min, max)
+
+
+class ScatterPlotPlotter(Plotter):
+
+    @override
+    def plot(self, x: np.ndarray, y: np.ndarray) -> CalculationValues:
+        curve = pg.ScatterPlotItem(x=x, y=y)
+        min = pg.ScatterPlotItem()
+        max = pg.ScatterPlotItem()
+
+        return CalculationValues(curve, min, max)
+
+
 class CurveGenerator:
+    # Change into a dict[int, ...]
     datasources: list[DataSource]
     derivations: list[Transformation]
+    plotters: list[Plotter]
 
     def __init__(
         # self, datasources: list[DataSources], derivations: list[Transformation]
-        self
+        self,
     ) -> None:
         # self.datasources = datasources
         # self.derivations = derivations
 
-        self.datasources = [Mfcc()]
+        self.datasources = [
+            None,
+            Mfcc(),
+            Formant1(),
+            Formant2(),
+            Formant3(),
+            None,
+            AmplitudeEnvelope(),
+        ]
         self.derivations = [Trajectory(), Velocity(), Acceleration()]
+        self.plotters = [
+            None,
+            CurvePlotter(),
+            ScatterPlotPlotter(),
+            ScatterPlotPlotter(),
+            ScatterPlotPlotter(),
+            None,
+            CurvePlotter(),
+        ]
 
     def generate(
         self, audio_path: str, curve_type_id: int, curve_derivation: int
     ) -> CalculationValues:
         source = self.datasources[curve_type_id]
+
+        if source is None:
+            # TODO
+            return
+
         operation = self.derivations[curve_derivation]
+        plotter = self.plotters[curve_type_id]
 
         data = source.calculate(audio_path)
         x, y = operation.transform(*data)
 
-        # PLOT
+        return plotter.plot(x, y)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
@@ -609,6 +721,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_curve(
         self, row_id: int, curve_type_id: int, curve_derivation_id: int
     ) -> None:
+
+        if not self.audio_path:
+            return
+
         old_curve, panel = self.curves[row_id]
         new_curve = self.curve_generator.generate(
             self.audio_path, curve_type_id, curve_derivation_id
@@ -621,6 +737,7 @@ class MainWindow(QtWidgets.QMainWindow):
             panel.panel.remove_curve(old_curve)
 
         panel.panel.add_curve(new_curve)
+        self.curves[row_id][0] = new_curve
 
     def change_curve_panel(self, row_id: int, new_panel_id: int) -> None:
         curve, current_panel = self.curves[row_id]
@@ -642,7 +759,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if curve is None:
             return
 
-        curve.setPen(color=new_color)
+        curve.curve.setPen(color=new_color)
 
     def change_curve_visibility(self, row_id: int, is_visible: bool) -> None:
         curve, _ = self.curves[row_id]
@@ -662,7 +779,7 @@ class MainWindow(QtWidgets.QMainWindow):
         assert new_row_id not in self.curves
         assert len(self.panels) > 0
 
-        self.curves[new_row_id] = (None, self.panels[0])
+        self.curves[new_row_id] = [None, self.panels[0]]
 
     def reset_curves(self) -> None:
         self.curves.clear()
