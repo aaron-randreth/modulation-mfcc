@@ -10,11 +10,14 @@ import pyqtgraph as pg
 
 import parselmouth
 import tgt
+import sounddevice as sd
+import wave
+from PyQt5.QtWidgets import QFileDialog
 
 from scipy.io import wavfile
 
 from mfcc import load_channel, get_MFCCS_change
-from calc import calc_formants, calculate_amplitude_envelope, get_f0
+from calc import calc_formants, calculate_amplitude_envelope,get_f0
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
@@ -25,7 +28,351 @@ from quadruple_axis_plot_item import (
     SoundInformation,
     DisplayInterval,
 )
+class UnifiedConfigDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configure Parameters")
+        self.layout = QtWidgets.QGridLayout()
 
+        # Main layout with a scroll area
+        scroll_area = QtWidgets.QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QtWidgets.QWidget()
+        scroll_layout = QtWidgets.QGridLayout(scroll_content)
+        scroll_area.setWidget(scroll_content)
+
+        # Checkbox for enabling/disabling MFCC customization
+        self.mfcc_enable_checkbox = QtWidgets.QCheckBox("Enable MFCC Customization")
+        self.mfcc_enable_checkbox.setChecked(True)
+        self.mfcc_enable_checkbox.stateChanged.connect(self.toggle_mfcc_fields)
+
+        # MFCC Configuration
+        self.mfcc_sample_rate_input = self.create_input_field("Sample Rate (Hz):", "10000")
+        self.mfcc_tstep_input = self.create_input_field("Time Step (s):", "0.005")
+        self.mfcc_winlen_input = self.create_input_field("Window Length (s):", "0.025")
+        self.mfcc_nmfcc_input = self.create_input_field("Number of MFCCs:", "13")
+        self.mfcc_nfft_input = self.create_input_field("Number of FFT Points:", "512")
+        self.mfcc_remove_first_input = self.create_input_field("Remove First MFCC (1/0):", "1")
+        self.mfcc_filt_cutoff_input = self.create_input_field("Filter Cutoff Frequency (Hz):", "12")
+        self.mfcc_filt_ord_input = self.create_input_field("Filter Order:", "6")
+        self.mfcc_name_input = self.create_input_field("Curve Name:", "Custom MFCC")
+        self.mfcc_panel_choice = QtWidgets.QComboBox()
+        self.mfcc_panel_choice.addItems(["1", "2", "3", "4"])
+
+        # Checkbox for enabling/disabling Amplitude customization
+        self.amp_enable_checkbox = QtWidgets.QCheckBox("Enable Amplitude Customization")
+        self.amp_enable_checkbox.setChecked(True)
+        self.amp_enable_checkbox.stateChanged.connect(self.toggle_amp_fields)
+
+        # Amplitude Configuration
+        self.amp_method_input = self.create_input_field("Method (RMS/Hilb/RMSpraat):", "RMS")
+        self.amp_winlen_input = self.create_input_field("Window Length (s):", "0.1")
+        self.amp_hoplen_input = self.create_input_field("Hop Length (s):", "0.01")
+        self.amp_center_input = self.create_input_field("Center (True/False):", "True")
+        self.amp_outfilter_input = self.create_input_field("Output Filter (None/iir/fir/sg):", "None")
+        self.amp_outfilt_type_input = self.create_input_field("Filter Type (low/band):", "low")
+        self.amp_outfilt_cutoff_input = self.create_input_field("Filter Cutoff Frequency (Hz):", "12")
+        self.amp_outfilt_len_input = self.create_input_field("Filter Length:", "6")
+        self.amp_outfilt_polyord_input = self.create_input_field("Filter Polynomial Order:", "3")
+        self.amp_name_input = self.create_input_field("Curve Name:", "Custom Amplitude")
+        self.amp_panel_choice = QtWidgets.QComboBox()
+        self.amp_panel_choice.addItems(["1", "2", "3", "4"])
+
+        # Checkbox for enabling/disabling Formant1 customization
+        self.formant1_enable_checkbox = QtWidgets.QCheckBox("Enable Formant1 Customization")
+        self.formant1_enable_checkbox.setChecked(True)
+        self.formant1_enable_checkbox.stateChanged.connect(self.toggle_formant1_fields)
+
+        # Formant1 Configuration
+        self.formant1_energy_threshold_input = self.create_input_field("Energy Threshold:", "20.0")
+        self.formant1_tstep_input = self.create_input_field("Time Step (s):", "0.005")
+        self.formant1_max_num_formants_input = self.create_input_field("Max Number of Formants:", "5")
+        self.formant1_max_formant_input = self.create_input_field("Maximum Formant (Hz):", "5500.0")
+        self.formant1_winlen_input = self.create_input_field("Window Length (s):", "0.025")
+        self.formant1_pre_emphasis_input = self.create_input_field("Pre-emphasis From (Hz):", "50.0")
+        self.formant1_name_input = self.create_input_field("Curve Name:", "Custom Formant1")
+        self.formant1_panel_choice = QtWidgets.QComboBox()
+        self.formant1_panel_choice.addItems(["1", "2", "3", "4"])
+
+        # Checkbox for enabling/disabling Formant2 customization
+        self.formant2_enable_checkbox = QtWidgets.QCheckBox("Enable Formant2 Customization")
+        self.formant2_enable_checkbox.setChecked(True)
+        self.formant2_enable_checkbox.stateChanged.connect(self.toggle_formant2_fields)
+
+        # Formant2 Configuration
+        self.formant2_energy_threshold_input = self.create_input_field("Energy Threshold:", "20.0")
+        self.formant2_tstep_input = self.create_input_field("Time Step (s):", "0.005")
+        self.formant2_max_num_formants_input = self.create_input_field("Max Number of Formants:", "5")
+        self.formant2_max_formant_input = self.create_input_field("Maximum Formant (Hz):", "5500.0")
+        self.formant2_winlen_input = self.create_input_field("Window Length (s):", "0.025")
+        self.formant2_pre_emphasis_input = self.create_input_field("Pre-emphasis From (Hz):", "50.0")
+        self.formant2_name_input = self.create_input_field("Curve Name:", "Custom Formant2")
+        self.formant2_panel_choice = QtWidgets.QComboBox()
+        self.formant2_panel_choice.addItems(["1", "2", "3", "4"])
+
+        # Checkbox for enabling/disabling Formant3 customization
+        self.formant3_enable_checkbox = QtWidgets.QCheckBox("Enable Formant3 Customization")
+        self.formant3_enable_checkbox.setChecked(True)
+        self.formant3_enable_checkbox.stateChanged.connect(self.toggle_formant3_fields)
+
+        # Formant3 Configuration
+        self.formant3_energy_threshold_input = self.create_input_field("Energy Threshold:", "20.0")
+        self.formant3_tstep_input = self.create_input_field("Time Step (s):", "0.005")
+        self.formant3_max_num_formants_input = self.create_input_field("Max Number of Formants:", "5")
+        self.formant3_max_formant_input = self.create_input_field("Maximum Formant (Hz):", "5500.0")
+        self.formant3_winlen_input = self.create_input_field("Window Length (s):", "0.025")
+        self.formant3_pre_emphasis_input = self.create_input_field("Pre-emphasis From (Hz):", "50.0")
+        self.formant3_name_input = self.create_input_field("Curve Name:", "Custom Formant3")
+        self.formant3_panel_choice = QtWidgets.QComboBox()
+        self.formant3_panel_choice.addItems(["1", "2", "3", "4"])
+
+        self.apply_button = QtWidgets.QPushButton("Apply")
+        self.apply_button.clicked.connect(self.accept)
+
+        # Organize layout into boxes for better readability
+        self.add_groupbox_to_layout("MFCC Configuration", [
+            self.mfcc_enable_checkbox,
+            self.mfcc_sample_rate_input,
+            self.mfcc_tstep_input,
+            self.mfcc_winlen_input,
+            self.mfcc_nmfcc_input,
+            self.mfcc_nfft_input,
+            self.mfcc_remove_first_input,
+            self.mfcc_filt_cutoff_input,
+            self.mfcc_filt_ord_input,
+            self.mfcc_name_input,
+            (QtWidgets.QLabel("MFCC Panel:"), self.mfcc_panel_choice)
+        ], scroll_layout, 0, 0)
+
+        self.add_groupbox_to_layout("Amplitude Configuration", [
+            self.amp_enable_checkbox,
+            self.amp_method_input,
+            self.amp_winlen_input,
+            self.amp_hoplen_input,
+            self.amp_center_input,
+            self.amp_outfilter_input,
+            self.amp_outfilt_type_input,
+            self.amp_outfilt_cutoff_input,
+            self.amp_outfilt_len_input,
+            self.amp_outfilt_polyord_input,
+            self.amp_name_input,
+            (QtWidgets.QLabel("Amplitude Panel:"), self.amp_panel_choice)
+        ], scroll_layout, 0, 1)
+
+        self.add_groupbox_to_layout("Formant1 Configuration", [
+            self.formant1_enable_checkbox,
+            self.formant1_energy_threshold_input,
+            self.formant1_tstep_input,
+            self.formant1_max_num_formants_input,
+            self.formant1_max_formant_input,
+            self.formant1_winlen_input,
+            self.formant1_pre_emphasis_input,
+            self.formant1_name_input,
+            (QtWidgets.QLabel("Formant1 Panel:"), self.formant1_panel_choice)
+        ], scroll_layout, 0, 2)
+
+        self.add_groupbox_to_layout("Formant2 Configuration", [
+            self.formant2_enable_checkbox,
+            self.formant2_energy_threshold_input,
+            self.formant2_tstep_input,
+            self.formant2_max_num_formants_input,
+            self.formant2_max_formant_input,
+            self.formant2_winlen_input,
+            self.formant2_pre_emphasis_input,
+            self.formant2_name_input,
+            (QtWidgets.QLabel("Formant2 Panel:"), self.formant2_panel_choice)
+        ], scroll_layout, 1, 0)
+
+        self.add_groupbox_to_layout("Formant3 Configuration", [
+            self.formant3_enable_checkbox,
+            self.formant3_energy_threshold_input,
+            self.formant3_tstep_input,
+            self.formant3_max_num_formants_input,
+            self.formant3_max_formant_input,
+            self.formant3_winlen_input,
+            self.formant3_pre_emphasis_input,
+            self.formant3_name_input,
+            (QtWidgets.QLabel("Formant3 Panel:"), self.formant3_panel_choice)
+        ], scroll_layout, 1, 1)
+
+        scroll_layout.addWidget(self.apply_button, 2, 0, 1, 3)
+
+        self.layout.addWidget(scroll_area)
+        self.setLayout(self.layout)
+
+    def create_input_field(self, label_text, default_value):
+        label = QtWidgets.QLabel(label_text)
+        input_field = QtWidgets.QLineEdit(default_value)
+        container = QtWidgets.QVBoxLayout()
+        container.addWidget(label)
+        container.addWidget(input_field)
+        widget = QtWidgets.QWidget()
+        widget.setLayout(container)
+        return widget, input_field
+
+    def add_groupbox_to_layout(self, title, widgets, layout, row, col):
+        group_box = QtWidgets.QGroupBox(title)
+        group_box_layout = QtWidgets.QVBoxLayout()
+        group_box.setLayout(group_box_layout)
+
+        for widget in widgets:
+            if isinstance(widget, tuple):
+                h_layout = QtWidgets.QHBoxLayout()
+                h_layout.addWidget(widget[0])
+                h_layout.addWidget(widget[1])
+                container = QtWidgets.QWidget()
+                container.setLayout(h_layout)
+                group_box_layout.addWidget(container)
+            else:
+                group_box_layout.addWidget(widget)
+
+        layout.addWidget(group_box, row, col)
+
+    def get_parameters(self):
+        mfcc_enabled = self.mfcc_enable_checkbox.isChecked()
+        amp_enabled = self.amp_enable_checkbox.isChecked()
+        formant1_enabled = self.formant1_enable_checkbox.isChecked()
+        formant2_enabled = self.formant2_enable_checkbox.isChecked()
+        formant3_enabled = self.formant3_enable_checkbox.isChecked()
+        params = {
+            "mfcc": {
+                "enabled": mfcc_enabled,
+                "signal_sample_rate": int(self.mfcc_sample_rate_input[1].text()),
+                "tStep": float(self.mfcc_tstep_input[1].text()),
+                "winLen": float(self.mfcc_winlen_input[1].text()),
+                "n_mfcc": int(self.mfcc_nmfcc_input[1].text()),
+                "n_fft": int(self.mfcc_nfft_input[1].text()),
+                "removeFirst": int(self.mfcc_remove_first_input[1].text()),
+                "filtCutoff": float(self.mfcc_filt_cutoff_input[1].text()),
+                "filtOrd": int(self.mfcc_filt_ord_input[1].text()),
+                "name": self.mfcc_name_input[1].text(),
+                "panel": int(self.mfcc_panel_choice.currentIndex())
+            },
+            "amplitude": {
+                "enabled": amp_enabled,
+                "method": self.amp_method_input[1].text(),
+                "winLen": float(self.amp_winlen_input[1].text()),
+                "hopLen": float(self.amp_hoplen_input[1].text()),
+                "center": self.amp_center_input[1].text().lower() == 'true',
+                "outFilter": None if self.amp_outfilter_input[1].text().lower() == 'none' else self.amp_outfilter_input[1].text(),
+                "outFiltType": self.amp_outfilt_type_input[1].text(),
+                "outFiltCutOff": [float(c) for c in self.amp_outfilt_cutoff_input[1].text().split()],
+                "outFiltLen": int(self.amp_outfilt_len_input[1].text()),
+                "outFiltPolyOrd": int(self.amp_outfilt_polyord_input[1].text()),
+                "name": self.amp_name_input[1].text(),
+                "panel": int(self.amp_panel_choice.currentIndex())
+            },
+            "formant1": {
+                "enabled": formant1_enabled,
+                "energy_threshold": float(self.formant1_energy_threshold_input[1].text()),
+                "time_step": float(self.formant1_tstep_input[1].text()),
+                "max_num_formants": int(self.formant1_max_num_formants_input[1].text()),
+                "max_formant": float(self.formant1_max_formant_input[1].text()),
+                "window_length": float(self.formant1_winlen_input[1].text()),
+                "pre_emphasis_from": float(self.formant1_pre_emphasis_input[1].text()),
+                "name": self.formant1_name_input[1].text(),
+                "panel": int(self.formant1_panel_choice.currentIndex())
+            },
+            "formant2": {
+                "enabled": formant2_enabled,
+                "energy_threshold": float(self.formant2_energy_threshold_input[1].text()),
+                "time_step": float(self.formant2_tstep_input[1].text()),
+                "max_num_formants": int(self.formant2_max_num_formants_input[1].text()),
+                "max_formant": float(self.formant2_max_formant_input[1].text()),
+                "window_length": float(self.formant2_winlen_input[1].text()),
+                "pre_emphasis_from": float(self.formant2_pre_emphasis_input[1].text()),
+                "name": self.formant2_name_input[1].text(),
+                "panel": int(self.formant2_panel_choice.currentIndex())
+            },
+            "formant3": {
+                "enabled": formant3_enabled,
+                "energy_threshold": float(self.formant3_energy_threshold_input[1].text()),
+                "time_step": float(self.formant3_tstep_input[1].text()),
+                "max_num_formants": int(self.formant3_max_num_formants_input[1].text()),
+                "max_formant": float(self.formant3_max_formant_input[1].text()),
+                "window_length": float(self.formant3_winlen_input[1].text()),
+                "pre_emphasis_from": float(self.formant3_pre_emphasis_input[1].text()),
+                "name": self.formant3_name_input[1].text(),
+                "panel": int(self.formant3_panel_choice.currentIndex())
+            }
+        }
+        print("Parameters from dialog:", params)  # Debugging output
+        return params
+
+    def toggle_mfcc_fields(self, state):
+        enabled = state == QtCore.Qt.Checked
+        for widget in [
+            self.mfcc_sample_rate_input[1],
+            self.mfcc_tstep_input[1],
+            self.mfcc_winlen_input[1],
+            self.mfcc_nmfcc_input[1],
+            self.mfcc_nfft_input[1],
+            self.mfcc_remove_first_input[1],
+            self.mfcc_filt_cutoff_input[1],
+            self.mfcc_filt_ord_input[1],
+            self.mfcc_name_input[1],
+            self.mfcc_panel_choice
+        ]:
+            widget.setEnabled(enabled)
+
+    def toggle_amp_fields(self, state):
+        enabled = state == QtCore.Qt.Checked
+        for widget in [
+            self.amp_method_input[1],
+            self.amp_winlen_input[1],
+            self.amp_hoplen_input[1],
+            self.amp_center_input[1],
+            self.amp_outfilter_input[1],
+            self.amp_outfilt_type_input[1],
+            self.amp_outfilt_cutoff_input[1],
+            self.amp_outfilt_len_input[1],
+            self.amp_outfilt_polyord_input[1],
+            self.amp_name_input[1],
+            self.amp_panel_choice
+        ]:
+            widget.setEnabled(enabled)
+
+    def toggle_formant1_fields(self, state):
+        enabled = state == QtCore.Qt.Checked
+        for widget in [
+            self.formant1_energy_threshold_input[1],
+            self.formant1_tstep_input[1],
+            self.formant1_max_num_formants_input[1],
+            self.formant1_max_formant_input[1],
+            self.formant1_winlen_input[1],
+            self.formant1_pre_emphasis_input[1],
+            self.formant1_name_input[1],
+            self.formant1_panel_choice
+        ]:
+            widget.setEnabled(enabled)
+
+    def toggle_formant2_fields(self, state):
+        enabled = state == QtCore.Qt.Checked
+        for widget in [
+            self.formant2_energy_threshold_input[1],
+            self.formant2_tstep_input[1],
+            self.formant2_max_num_formants_input[1],
+            self.formant2_max_formant_input[1],
+            self.formant2_winlen_input[1],
+            self.formant2_pre_emphasis_input[1],
+            self.formant2_name_input[1],
+            self.formant2_panel_choice
+        ]:
+            widget.setEnabled(enabled)
+
+    def toggle_formant3_fields(self, state):
+        enabled = state == QtCore.Qt.Checked
+        for widget in [
+            self.formant3_energy_threshold_input[1],
+            self.formant3_tstep_input[1],
+            self.formant3_max_num_formants_input[1],
+            self.formant3_max_formant_input[1],
+            self.formant3_winlen_input[1],
+            self.formant3_pre_emphasis_input[1],
+            self.formant3_name_input[1],
+            self.formant3_panel_choice
+        ]:
+            widget.setEnabled(enabled)
 
 class ColorSelection(QtWidgets.QWidget):
     color_chosen = QtCore.pyqtSignal(str)
@@ -115,8 +462,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         self._derivation_type = QtWidgets.QComboBox()
 
         self._curve_type.addItems(
-            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]  # Add F0 here
-        )
+            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]        )
         self.ema_type.setStyleSheet(
             "background-color: lightblue; border: 1px solid black; padding: 5px"
         )
@@ -432,7 +778,13 @@ class Formant3(DataSource):
             parselmouth.Sound(audio_path), 0, 99999, 40
         )
         return f_times, f3_values
+class F0(DataSource):
 
+    @override
+    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
+        sample_rate, audio_signal = wavfile.read(audio_path)
+        f0, f0_times = get_f0(audio_signal, sample_rate)
+        return f0_times, f0
 
 class AmplitudeEnvelope(DataSource):
 
@@ -445,13 +797,6 @@ class AmplitudeEnvelope(DataSource):
 
 
         return time_axis, amplitude_envelope
-class F0(DataSource):
-
-    @override
-    def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
-        sample_rate, audio_signal = wavfile.read(audio_path)
-        f0, f0_times = get_f0(audio_signal, sample_rate)
-        return f0_times, f0
 
 
 class Plotter(ABC):
@@ -488,7 +833,6 @@ class ScatterPlotPlotter(Plotter):
 
 
 class CurveGenerator:
-    # Change into a dict[int, ...]
     datasources: list[DataSource]
     derivations: list[Transformation]
     plotters: list[Plotter]
@@ -500,7 +844,7 @@ class CurveGenerator:
             Formant1(),
             Formant2(),
             Formant3(),
-            F0(),  # Add the new F0 data source here
+            F0(),
             AmplitudeEnvelope(),
         ]
         self.derivations = [Trajectory(), Velocity(), Acceleration()]
@@ -510,17 +854,18 @@ class CurveGenerator:
             ScatterPlotPlotter(),
             ScatterPlotPlotter(),
             ScatterPlotPlotter(),
-            CurvePlotter(),  # Assuming F0 uses a CurvePlotter
+            CurvePlotter(),
             CurvePlotter(),
         ]
 
-    def generate(
-        self, audio_path: str, curve_type_id: int, curve_derivation: int
-    ) -> CalculationValues:
+    def generate(self, audio_path: str, curve_type_id: int, curve_derivation: int) -> CalculationValues:
+        if curve_type_id < 0 or curve_type_id >= len(self.datasources):
+            raise IndexError("Curve type ID is out of range")
+
         source = self.datasources[curve_type_id]
 
         if source is None:
-            return None
+            raise ValueError("Invalid data source for the given curve type ID")
 
         operation = self.derivations[curve_derivation]
         plotter = self.plotters[curve_type_id]
@@ -529,6 +874,105 @@ class CurveGenerator:
         x, y = operation.transform(*data)
 
         return plotter.plot(x, y)
+    def generate_custom_formant2(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        sound = parselmouth.Sound(audio_path)
+        f_times, _, f2_values, _ = calc_formants(
+            sound,
+            0,
+            99999,
+            energy_threshold=params["energy_threshold"],
+            time_step=params["time_step"],
+            max_number_of_formants=params["max_num_formants"],
+            maximum_formant=params["max_formant"],
+            window_length=params["window_length"],
+            pre_emphasis_from=params["pre_emphasis_from"]
+        )
+
+        operation = self.derivations[derivation_id]
+        x, y = operation.transform(f_times, f2_values)
+        
+        plotter = ScatterPlotPlotter()
+        return plotter.plot(x, y)
+
+    def generate_custom_formant3(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        sound = parselmouth.Sound(audio_path)
+        f_times, _, _, f3_values = calc_formants(
+            sound,
+            0,
+            99999,
+            energy_threshold=params["energy_threshold"],
+            time_step=params["time_step"],
+            max_number_of_formants=params["max_num_formants"],
+            maximum_formant=params["max_formant"],
+            window_length=params["window_length"],
+            pre_emphasis_from=params["pre_emphasis_from"]
+        )
+
+        operation = self.derivations[derivation_id]
+        x, y = operation.transform(f_times, f3_values)
+        
+        plotter = ScatterPlotPlotter()
+        return plotter.plot(x, y)
+    def generate_custom_formant1(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        sound = parselmouth.Sound(audio_path)
+        f_times, f1_values, _, _ = calc_formants(
+            sound,
+            0,
+            99999,
+            energy_threshold=params["energy_threshold"],
+            time_step=params["time_step"],
+            max_number_of_formants=params["max_num_formants"],
+            maximum_formant=params["max_formant"],
+            window_length=params["window_length"],
+            pre_emphasis_from=params["pre_emphasis_from"]
+        )
+
+        operation = self.derivations[derivation_id]
+        x, y = operation.transform(f_times, f1_values)
+        
+        plotter = ScatterPlotPlotter()
+        return plotter.plot(x, y)
+    def generate_custom_mfcc(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        data = load_channel(audio_path)
+        x, y = get_MFCCS_change(
+            audio_data=data,
+            signal_sample_rate=params["signal_sample_rate"],
+            tStep=params["tStep"],
+            winLen=params["winLen"],
+            n_mfcc=params["n_mfcc"],
+            n_fft=params["n_fft"],
+            removeFirst=params["removeFirst"],
+            filtCutoff=params["filtCutoff"],
+            filtOrd=params["filtOrd"]
+        )
+        operation = self.derivations[derivation_id]
+        x, y = operation.transform(x, y)
+        print(x)
+        plotter = CurvePlotter()
+        return plotter.plot(x, y)
+    
+    def generate_custom_amplitude(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        sample_rate, audio_signal = wavfile.read(audio_path)
+        amplitude, time_axis = calculate_amplitude_envelope(
+            audio_signal,
+            sample_rate,
+            method=params["method"],
+            winLen=params["winLen"],
+            hopLen=params["hopLen"],
+            center=params["center"],
+            outFilter=params["outFilter"],
+            outFiltType=params["outFiltType"],
+            outFiltCutOff=params["outFiltCutOff"],
+            outFiltLen=params["outFiltLen"],
+            outFiltPolyOrd=params["outFiltPolyOrd"]
+        )
+
+        operation = self.derivations[derivation_id]
+        time_axis, amplitude = operation.transform(time_axis, amplitude)
+
+
+        plotter = CurvePlotter()
+        return plotter.plot(time_axis, amplitude)
 
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
@@ -539,7 +983,6 @@ class MainWindow(QtWidgets.QMainWindow):
     annotation_widget: DisplayInterval
 
     panels: list[PanelWidget]
-    # ["row_id": (curve_id, panel_id)]
     curves: dict[int, list[int, int]]
 
     def __init__(self) -> None:
@@ -573,7 +1016,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         )
         self.tier_selection.tier_clear.connect(self.annotation_widget.clear)
-        # self.config_mfcc_button.clicked.connect(self.open_mfcc_config)
+        self.config_mfcc_button.clicked.connect(self.open_config)
 
         self.dashboard_widget.row_added.connect(self.handle_new_row)
 
@@ -598,7 +1041,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.curves = {}
         self.panels = []
-
+        self.custom_mfcc_params = {}
+        self.custom_amplitude_params = {}
+        self.custom_formant1_params = {}
+        self.custom_formant2_params = {}
+        self.custom_formant3_params = {}
         for i in range(4):
             panel_widget = PanelWidget(i + 1)
 
@@ -606,6 +1053,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
             self.add_curve_widget(panel_widget)
             self.panels.append(panel_widget)
+
+
+        # Add recording state
+        self.recording = False
+        self.frames = []
+        self.recorded_audio = []
+        self.stream = None
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update_plot)
+        self.timer.start(100)  # Update plot every 100 ms
 
     def init_main_layout(self) -> None:
         central_widget = QtWidgets.QWidget()
@@ -640,7 +1097,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_control_widget(self, widget: QtWidgets.QWidget) -> None:
         self.control_column_layout.addWidget(widget)
 
-    def create_load_buttons(self) -> None:
+    def create_load_buttons(self) -> QtWidgets.QGroupBox:
         load_group_box = QtWidgets.QGroupBox("Load Audio and TextGrid")
         load_layout = QtWidgets.QVBoxLayout()
 
@@ -650,8 +1107,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         load_audio_button.clicked.connect(self.load_audio)
         load_textgrid_button.clicked.connect(self.load_annotations)
-        # self.record_button.clicked.connect(self.toggle_recording)
-
+        self.record_button.clicked.connect(self.toggle_recording)
         load_layout.addWidget(load_audio_button)
         load_layout.addWidget(load_textgrid_button)
         load_layout.addWidget(self.record_button)
@@ -659,18 +1115,18 @@ class MainWindow(QtWidgets.QMainWindow):
         load_group_box.setLayout(load_layout)
         return load_group_box
 
-    def create_audio_control_buttons(self) -> None:
+    def create_audio_control_buttons(self) -> QtWidgets.QGroupBox:
         audio_control_group_box = QtWidgets.QGroupBox("Audio Control")
         audio_control_layout = QtWidgets.QVBoxLayout()
 
         play_button = StyledButton("Play Selected Region")
-        # play_button.clicked.connect(self.play_selected_region)
+
         audio_control_layout.addWidget(play_button)
 
         audio_control_group_box.setLayout(audio_control_layout)
         return audio_control_group_box
 
-    def create_spectrogram_checkbox(self) -> None:
+    def create_spectrogram_checkbox(self) -> QtWidgets.QGroupBox:
         spectrogram_group_box = QtWidgets.QGroupBox("Select Spectrogram")
         spectrolayout = QtWidgets.QVBoxLayout()
 
@@ -697,7 +1153,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.audio_widget.set_data(Parselmouth(audio_path))
 
-        # self.dashboard_widget.dashboard.reset()
         self.reset_curves()
 
     def load_annotations(self) -> None:
@@ -715,29 +1170,72 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tier_selection.set_data(self.annotation_data)
 
-    def update_curve(
-        self, row_id: int, curve_type_id: int, curve_derivation_id: int
-    ) -> None:
-
+    def update_curve(self, row_id: int, curve_type_id: int, curve_derivation_id: int) -> None:
         if not self.audio_path:
             return
 
-        old_curve, panel = self.curves[row_id]
-        new_curve = self.curve_generator.generate(
-            self.audio_path, curve_type_id, curve_derivation_id
-        )
+        old_curve, panel = self.curves.get(row_id, [None, None])
+        new_curve = None
+        if curve_type_id >= 0 and curve_type_id < len(self.curve_generator.datasources):
+            new_curve = self.curve_generator.generate(
+                self.audio_path, curve_type_id, curve_derivation_id
+            )
+        elif curve_type_id == len(self.curve_generator.datasources):
+            if row_id not in self.custom_mfcc_params:
+                return
+            params = self.custom_mfcc_params[row_id]
+            new_curve = self.curve_generator.generate_custom_mfcc(
+                self.audio_path, params, curve_derivation_id
+            )
+        elif curve_type_id == len(self.curve_generator.datasources):
+            if row_id not in self.custom_amplitude_params:
+                return
+            params = self.custom_amplitude_params[row_id]
+            new_curve = self.curve_generator.generate_custom_amplitude(
+                self.audio_path, params, curve_derivation_id
+            )
+        elif curve_type_id == len(self.curve_generator.datasources):
+            if row_id not in self.custom_formant1_params:
+                return
+            params = self.custom_formant1_params[row_id]
+            new_curve = self.curve_generator.generate_custom_formant1(
+                self.audio_path, params, curve_derivation_id
+            )
+        elif curve_type_id == len(self.curve_generator.datasources):
+            if row_id not in self.custom_formant2_params:
+                return
+            params = self.custom_formant2_params[row_id]
+            new_curve = self.curve_generator.generate_custom_formant2(
+                self.audio_path, params, curve_derivation_id
+            )
+        elif curve_type_id == len(self.curve_generator.datasources):
+            if row_id not in self.custom_formant3_params:
+                return
+            params = self.custom_formant3_params[row_id]
+            new_curve = self.curve_generator.generate_custom_formant3(
+                self.audio_path, params, curve_derivation_id
+            )
+        else:
+            return
 
         if panel is None:
             return
 
         if old_curve is not None:
-            panel.panel.remove_curve(old_curve)
+            try:
+                panel.panel.remove_curve(old_curve)
+            except ValueError:
+                pass
 
-        panel.panel.add_curve(new_curve)
-        self.curves[row_id][0] = new_curve
+        if new_curve is not None:
+            panel.panel.add_curve(new_curve)
+            self.curves[row_id][0] = new_curve
 
     def change_curve_panel(self, row_id: int, new_panel_id: int) -> None:
-        curve, current_panel = self.curves[row_id]
+        if row_id not in self.curves:
+            return
+
+        curve, current_panel = self.curves.get(row_id, [None, None])
         new_panel = self.panels[new_panel_id]
 
         self.curves[row_id][1] = new_panel
@@ -746,17 +1244,21 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         if current_panel is not None:
-            current_panel.panel.remove_curve(curve)
+            try:
+                current_panel.panel.remove_curve(curve)
+            except ValueError:
+                pass
 
         new_panel.panel.add_curve(curve)
 
     def change_curve_color(self, row_id: int, new_color: str) -> None:
-        curve, _ = self.curves[row_id]
+        curve, panel = self.curves.get(row_id, [None, None])
 
         if curve is None:
             return
 
         curve.curve.setPen(color=new_color)
+        panel.panel.update_y_axis_color(curve, new_color)
 
     def change_curve_visibility(self, row_id: int, is_visible: bool) -> None:
         curve, _ = self.curves[row_id]
@@ -782,6 +1284,161 @@ class MainWindow(QtWidgets.QMainWindow):
         self.curves.clear()
         for panel in self.panels:
             panel.panel.reset()
+
+    def open_config(self):
+        dialog = UnifiedConfigDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            params = dialog.get_parameters()
+            if params["mfcc"]["enabled"]:
+                self.add_custom_mfcc_curve(params["mfcc"], params["mfcc"]["panel"])
+            if params["amplitude"]["enabled"]:
+                self.add_custom_amplitude_curve(params["amplitude"], params["amplitude"]["panel"])
+            if params["formant1"]["enabled"]:
+                self.add_custom_formant1_curve(params["formant1"], params["formant1"]["panel"])
+            if params["formant2"]["enabled"]:
+                self.add_custom_formant2_curve(params["formant2"], params["formant2"]["panel"])
+            if params["formant3"]["enabled"]:
+                self.add_custom_formant3_curve(params["formant3"], params["formant3"]["panel"])
+
+    def add_custom_formant1_curve(self, params, panel_id):
+        curve_values = self.curve_generator.generate_custom_formant1(self.audio_path, params, 0)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(params["name"])
+        index = item._curve_type.findText(params["name"])
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_formant1_params[row_id] = params
+
+    def add_custom_formant2_curve(self, params, panel_id):
+        curve_values = self.curve_generator.generate_custom_formant2(self.audio_path, params, 0)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(params["name"])
+        index = item._curve_type.findText(params["name"])
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_formant2_params[row_id] = params
+
+    def add_custom_formant3_curve(self, params, panel_id):
+        curve_values = self.curve_generator.generate_custom_formant3(self.audio_path, params, 0)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(params["name"])
+        index = item._curve_type.findText(params["name"])
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_formant3_params[row_id] = params
+
+    def add_custom_mfcc_curve(self, params, panel_id):
+        curve_values = self.curve_generator.generate_custom_mfcc(self.audio_path, params, 0)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(params["name"])
+        index = item._curve_type.findText(params["name"])
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_mfcc_params[row_id] = params
+
+    def add_custom_amplitude_curve(self, params, panel_id):
+        derivation_id = 0  # Par défaut à la trajectoire ; modifiez si nécessaire
+        curve_values = self.curve_generator.generate_custom_amplitude(self.audio_path, params, derivation_id)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(params["name"])
+        index = item._curve_type.findText(params["name"])
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_amplitude_params[row_id] = params
+
+    def toggle_recording(self):
+        if self.recording:
+            self.stop_recording()
+        else:
+            self.start_recording()
+
+    def start_recording(self):
+        self.recording = True
+        self.frames = []
+        self.record_button.setText("Stop Recording")
+        self.stream = sd.InputStream(callback=self.audio_callback, channels=1, samplerate=44100, dtype='int16')
+        self.stream.start()
+
+    def stop_recording(self):
+        self.recording = False
+        self.record_button.setText("Record Audio")
+        self.stream.stop()
+        self.stream.close()
+        self.timer.stop()
+
+        recorded_audio = np.concatenate(self.frames, axis=0)
+        non_zero_audio_data = recorded_audio[recorded_audio != 0]
+        
+        audio_path, _ = QFileDialog.getSaveFileName(self, "Save Recorded Audio", "", "Audio Files (*.wav)")
+        if audio_path:
+            wavfile.write(audio_path, 44100, non_zero_audio_data)
+
+            self.audio_path = audio_path
+            self.audio_indicator.file_loaded(audio_path)
+            self.audio_widget.set_data(Parselmouth(audio_path))
+            self.reset_curves()
+
+
+    def audio_callback(self, indata, frames, time, status):
+        if self.recording:
+            self.frames.append(indata.copy())
+            # Ajoutez cette ligne pour mettre à jour le signal en temps réel
+            self.update_plot()
+
+    def update_plot(self):
+        if self.frames:
+            audio_data = np.concatenate(self.frames, axis=0)
+            self.audio_widget.update_audio_waveform(audio_data)
 
 
 if __name__ == "__main__":
