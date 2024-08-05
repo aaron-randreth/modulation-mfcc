@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
-
+import numpy as np
 from bidict import bidict
 import tgt
 
@@ -219,6 +219,19 @@ class Panel(QuadrupleAxisPlotItem):
                 return axis_id
 
         return None
+    def update_y_axis_color(self, item: CalculationValues, color: str) -> None:
+        axis_id = self.get_item_axis(item)
+        if axis_id:
+            axis = self.getAxis(axis_id)
+            axis.setPen(pg.mkPen(color=color))
+            
+            # Manually update the tick labels with the new color
+            ticks = axis.tickValues()
+            for tick in ticks:
+                for pos, label in tick:
+                    text_item = pg.TextItem(text=label, color=color)
+                    text_item.setPos(pos, 0)
+                    axis.scene().addItem(text_item)
 
     def get_item_axis(self, item: CalculationValues) -> str | None:
         if item not in self.rotation.inverse:
@@ -333,6 +346,8 @@ class SoundInformation(pg.GraphicsLayoutWidget):
         self.nextRow()
         self.addItem(self.spectrogram_plot)
 
+        self.spectrogram_plot.getAxis('bottom').setHeight(0)
+        self.spectrogram_plot.getAxis('bottom').hide()
     def toggle_spectrogram(self, show: bool) -> None:
         if show:
             self.spectrogram_plot.show()
@@ -355,6 +370,21 @@ class SoundInformation(pg.GraphicsLayoutWidget):
         self.spectrogram_image_item.set_data(
             spectrogram.frequencies, spectrogram.timestamps, spectrogram.data_matrix
         )
+
+    def update_audio_waveform(self, audio_data):
+        if audio_data.ndim > 1:
+            audio_data = np.mean(audio_data, axis=1)
+        
+        max_val = np.max(np.abs(audio_data))
+        if max_val > 0:
+            audio_data = audio_data / max_val
+        time_axis = np.arange(len(audio_data)) / 44100.0
+        
+        self.sound_plot_data_item.setData(time_axis, audio_data)
+
+        x_max = time_axis[-1]
+        if x_max > self.sound_plot.viewRange()[0][1]:
+            self.sound_plot.setXRange(0, x_max, padding=0)
 
 class Interval:
     name: str
