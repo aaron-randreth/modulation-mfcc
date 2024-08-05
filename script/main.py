@@ -55,6 +55,12 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.mfcc_remove_first_input = self.create_input_field("Remove First MFCC (1/0):", "1")
         self.mfcc_filt_cutoff_input = self.create_input_field("Filter Cutoff Frequency (Hz):", "12")
         self.mfcc_filt_ord_input = self.create_input_field("Filter Order:", "6")
+        self.mfcc_diff_method_input = self.create_input_field("Diff Method (grad/sg):", "grad")
+        self.mfcc_out_filter_input = self.create_input_field("Output Filter (None/iir/fir/sg):", "iir")
+        self.mfcc_out_filt_type_input = self.create_input_field("Filter Type (low/band):", "low")
+        self.mfcc_out_filt_cutoff_input = self.create_input_field("Output Filter Cutoff (Hz):", "12")
+        self.mfcc_out_filt_len_input = self.create_input_field("Filter Length:", "6")
+        self.mfcc_out_filt_polyord_input = self.create_input_field("Filter Polynomial Order:", "3")
         self.mfcc_name_input = self.create_input_field("Curve Name:", "Custom MFCC")
         self.mfcc_panel_choice = QtWidgets.QComboBox()
         self.mfcc_panel_choice.addItems(["1", "2", "3", "4"])
@@ -125,11 +131,28 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant3_name_input = self.create_input_field("Curve Name:", "Custom Formant3")
         self.formant3_panel_choice = QtWidgets.QComboBox()
         self.formant3_panel_choice.addItems(["1", "2", "3", "4"])
+        # F0 Configuration
+        self.f0_enable_checkbox = QtWidgets.QCheckBox("Enable F0 Customization")
+        self.f0_enable_checkbox.setChecked(True)
+        self.f0_enable_checkbox.stateChanged.connect(self.toggle_f0_fields)
+
+        self.f0_method_input = self.create_input_field("Method (praatac/pyin):", "praatac")
+        self.f0_hop_size_input = self.create_input_field("Hop Size (s):", "0.01")
+        self.f0_min_pitch_input = self.create_input_field("Min Pitch (Hz):", "75")
+        self.f0_max_pitch_input = self.create_input_field("Max Pitch (Hz):", "600")
+        self.f0_interp_unvoiced_input = self.create_input_field("Interp Unvoiced (None/linear):", "linear")
+        self.f0_out_filter_input = self.create_input_field("Output Filter (None/iir/fir/sg):", "iir")
+        self.f0_out_filt_type_input = self.create_input_field("Filter Type (low/band/high):", "low")
+        self.f0_out_filt_cutoff_input = self.create_input_field("Output Filter Cutoff (Hz):", "12")
+        self.f0_out_filt_len_input = self.create_input_field("Filter Length:", "6")
+        self.f0_out_filt_polyord_input = self.create_input_field("Filter Polynomial Order:", "3")
+        self.f0_name_input = self.create_input_field("Curve Name:", "Custom F0")
+        self.f0_panel_choice = QtWidgets.QComboBox()
+        self.f0_panel_choice.addItems(["1", "2", "3", "4"])
 
         self.apply_button = QtWidgets.QPushButton("Apply")
         self.apply_button.clicked.connect(self.accept)
 
-        # Organize layout into boxes for better readability
         self.add_groupbox_to_layout("MFCC Configuration", [
             self.mfcc_enable_checkbox,
             self.mfcc_sample_rate_input,
@@ -140,10 +163,15 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.mfcc_remove_first_input,
             self.mfcc_filt_cutoff_input,
             self.mfcc_filt_ord_input,
+            self.mfcc_diff_method_input,
+            self.mfcc_out_filter_input,
+            self.mfcc_out_filt_type_input,
+            self.mfcc_out_filt_cutoff_input,
+            self.mfcc_out_filt_len_input,
+            self.mfcc_out_filt_polyord_input,
             self.mfcc_name_input,
             (QtWidgets.QLabel("MFCC Panel:"), self.mfcc_panel_choice)
         ], scroll_layout, 0, 0)
-
         self.add_groupbox_to_layout("Amplitude Configuration", [
             self.amp_enable_checkbox,
             self.amp_method_input,
@@ -194,7 +222,21 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant3_name_input,
             (QtWidgets.QLabel("Formant3 Panel:"), self.formant3_panel_choice)
         ], scroll_layout, 1, 1)
-
+        self.add_groupbox_to_layout("F0 Configuration", [
+            self.f0_enable_checkbox,
+            self.f0_method_input,
+            self.f0_hop_size_input,
+            self.f0_min_pitch_input,
+            self.f0_max_pitch_input,
+            self.f0_interp_unvoiced_input,
+            self.f0_out_filter_input,
+            self.f0_out_filt_type_input,
+            self.f0_out_filt_cutoff_input,
+            self.f0_out_filt_len_input,
+            self.f0_out_filt_polyord_input,
+            self.f0_name_input,
+            (QtWidgets.QLabel("F0 Panel:"), self.f0_panel_choice)
+        ], scroll_layout, 1, 2)
         scroll_layout.addWidget(self.apply_button, 2, 0, 1, 3)
 
         self.layout.addWidget(scroll_area)
@@ -234,6 +276,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         formant1_enabled = self.formant1_enable_checkbox.isChecked()
         formant2_enabled = self.formant2_enable_checkbox.isChecked()
         formant3_enabled = self.formant3_enable_checkbox.isChecked()
+        f0_enabled = self.f0_enable_checkbox.isChecked()
         params = {
             "mfcc": {
                 "enabled": mfcc_enabled,
@@ -245,6 +288,12 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "removeFirst": int(self.mfcc_remove_first_input[1].text()),
                 "filtCutoff": float(self.mfcc_filt_cutoff_input[1].text()),
                 "filtOrd": int(self.mfcc_filt_ord_input[1].text()),
+                "diffMethod": self.mfcc_diff_method_input[1].text(),
+                "outFilter": None if self.mfcc_out_filter_input[1].text().lower() == 'none' else self.mfcc_out_filter_input[1].text(),
+                "outFiltType": self.mfcc_out_filt_type_input[1].text(),
+                "outFiltCutOff": [float(c) for c in self.mfcc_out_filt_cutoff_input[1].text().split()],
+                "outFiltLen": int(self.mfcc_out_filt_len_input[1].text()),
+                "outFiltPolyOrd": int(self.mfcc_out_filt_polyord_input[1].text()),
                 "name": self.mfcc_name_input[1].text(),
                 "panel": int(self.mfcc_panel_choice.currentIndex())
             },
@@ -295,6 +344,22 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "name": self.formant3_name_input[1].text(),
                 "panel": int(self.formant3_panel_choice.currentIndex())
             }
+                ,
+            "f0": {
+                "enabled": f0_enabled,
+                "method": self.f0_method_input[1].text(),
+                "hopSize": float(self.f0_hop_size_input[1].text()),
+                "minPitch": float(self.f0_min_pitch_input[1].text()),
+                "maxPitch": float(self.f0_max_pitch_input[1].text()),
+                "interpUnvoiced": self.f0_interp_unvoiced_input[1].text(),
+                "outFilter": None if self.f0_out_filter_input[1].text().lower() == 'none' else self.f0_out_filter_input[1].text(),
+                "outFiltType": self.f0_out_filt_type_input[1].text(),
+                "outFiltCutOff": [float(c) for c in self.f0_out_filt_cutoff_input[1].text().split()],
+                "outFiltLen": int(self.f0_out_filt_len_input[1].text()),
+                "outFiltPolyOrd": int(self.f0_out_filt_polyord_input[1].text()),
+                "name": self.f0_name_input[1].text(),
+                "panel": int(self.f0_panel_choice.currentIndex())
+            }
         }
         print("Parameters from dialog:", params)  # Debugging output
         return params
@@ -310,11 +375,16 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.mfcc_remove_first_input[1],
             self.mfcc_filt_cutoff_input[1],
             self.mfcc_filt_ord_input[1],
+            self.mfcc_diff_method_input[1],
+            self.mfcc_out_filter_input[1],
+            self.mfcc_out_filt_type_input[1],
+            self.mfcc_out_filt_cutoff_input[1],
+            self.mfcc_out_filt_len_input[1],
+            self.mfcc_out_filt_polyord_input[1],
             self.mfcc_name_input[1],
             self.mfcc_panel_choice
         ]:
             widget.setEnabled(enabled)
-
     def toggle_amp_fields(self, state):
         enabled = state == QtCore.Qt.Checked
         for widget in [
@@ -373,7 +443,23 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant3_panel_choice
         ]:
             widget.setEnabled(enabled)
-
+    def toggle_f0_fields(self, state):
+        enabled = state == QtCore.Qt.Checked
+        for widget in [
+            self.f0_method_input[1],
+            self.f0_hop_size_input[1],
+            self.f0_min_pitch_input[1],
+            self.f0_max_pitch_input[1],
+            self.f0_interp_unvoiced_input[1],
+            self.f0_out_filter_input[1],
+            self.f0_out_filt_type_input[1],
+            self.f0_out_filt_cutoff_input[1],
+            self.f0_out_filt_len_input[1],
+            self.f0_out_filt_polyord_input[1],
+            self.f0_name_input[1],
+            self.f0_panel_choice
+        ]:
+            widget.setEnabled(enabled)
 class ColorSelection(QtWidgets.QWidget):
     color_chosen = QtCore.pyqtSignal(str)
     colors: list[str]
@@ -745,7 +831,48 @@ class Mfcc(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         data = load_channel(audio_path)
-        x, y = get_MFCCS_change(data)
+        print(audio_path)
+        # Paramètres pour la fonction get_MFCCS_change
+        sig_sr = 10000  # Fréquence d'échantillonnage pour l'analyse
+        channel_n = 0  # Numéro du canal pour les fichiers audio multicanaux
+        t_step = 0.001  # Pas de temps pour l'analyse en secondes
+        win_len = 0.025  # Longueur de la fenêtre d'analyse en secondes
+        n_mfcc = 13  # Nombre de MFCC à calculer
+        n_fft = 512  # Nombre de points pour la FFT
+        min_freq = 100  # Fréquence spectrale minimale considérée
+        max_freq = 10000  # Fréquence spectrale maximale considérée
+        remove_first = 1  # Si 1, le premier coefficient cepstral est supprimé
+        filt_cutoff = 12  # Fréquence de coupure du filtre passe-bande
+        filt_ord = 6  # Ordre du filtre passe-bande
+        diff_method = 'grad'  # Méthode pour calculer la vitesse ('grad' ou 'sg')
+        out_filter = 'iir'  # Type de filtre de sortie
+        out_filt_type = 'low'  # Type de filtre de sortie ('low', 'band' ou 'high')
+        out_filt_cutoff = [12]  # Fréquence(s) de coupure du filtre de sortie
+        out_filt_len = 6  # Longueur du filtre de sortie
+        out_filt_poly_ord = 3  # Ordre du polynôme du filtre Savitsky-Golay
+
+        # Appel de la fonction get_MFCCS_change
+        y, x = get_MFCCS_change(
+            audio_path, 
+            sig_sr, 
+            channelN=channel_n, 
+            tStep=t_step, 
+            winLen=win_len, 
+            n_mfcc=n_mfcc, 
+            n_fft=n_fft, 
+            minFreq=min_freq, 
+            maxFreq=max_freq, 
+            removeFirst=remove_first, 
+            filtCutoff=filt_cutoff, 
+            filtOrd=filt_ord, 
+            diffMethod=diff_method, 
+            outFilter=out_filter,
+            outFiltType=out_filt_type,
+            outFiltCutOff=out_filt_cutoff, 
+            outFiltLen=out_filt_len,  
+            outFiltPolyOrd=out_filt_poly_ord
+        )
+
 
         return x, y
 
@@ -782,10 +909,39 @@ class F0(DataSource):
 
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
-        sample_rate, audio_signal = wavfile.read(audio_path)
-        f0, f0_times = get_f0(audio_signal, sample_rate)
-        return f0_times, f0
+        # Chargez le fichier audio
+        sig_sr, audio_data = wavfile.read(audio_path)
+        if audio_data.ndim > 1:
+            audio_data = audio_data[:, 0]  # Utiliser le premier canal si stéréo
 
+        # Paramètres pour la fonction get_f0
+        method = 'praatac'  # Méthode de calcul
+        hop_size = 0.01  # Taille de la fenêtre d'analyse en secondes
+        min_pitch = 75  # Hauteur minimale
+        max_pitch = 600  # Hauteur maximale
+        interp_unvoiced = 'linear'  # Méthode d'interpolation pour les segments non voisés
+        out_filter = 'iir'  # Type de filtre de sortie
+        out_filt_type = 'low'  # Type de filtre de sortie ('low', 'band' ou 'high')
+        out_filt_cutoff = [12]  # Fréquence(s) de coupure du filtre de sortie
+        out_filt_len = 6  # Longueur du filtre de sortie
+        out_filt_poly_ord = 3  # Ordre du polynôme du filtre Savitsky-Golay
+
+        # Appel de la fonction get_f0
+        f0, f0_times = get_f0(
+            audio_data,
+            sig_sr,
+            method=method,
+            hopSize=hop_size,
+            minPitch=min_pitch,
+            maxPitch=max_pitch,
+            interpUnvoiced=interp_unvoiced,
+            outFilter=out_filter,
+            outFiltType=out_filt_type,
+            outFiltCutOff=out_filt_cutoff,
+            outFiltLen=out_filt_len,
+            outFiltPolyOrd=out_filt_poly_ord
+        )
+        return f0_times, f0
 class AmplitudeEnvelope(DataSource):
 
     @override
@@ -932,22 +1088,28 @@ class CurveGenerator:
         
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
+
     def generate_custom_mfcc(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
-        data = load_channel(audio_path)
-        x, y = get_MFCCS_change(
-            audio_data=data,
-            signal_sample_rate=params["signal_sample_rate"],
+        y, x = get_MFCCS_change(
+            audio_path,
+            params["signal_sample_rate"],
+            channelN=0,
             tStep=params["tStep"],
             winLen=params["winLen"],
             n_mfcc=params["n_mfcc"],
             n_fft=params["n_fft"],
             removeFirst=params["removeFirst"],
             filtCutoff=params["filtCutoff"],
-            filtOrd=params["filtOrd"]
+            filtOrd=params["filtOrd"],
+            diffMethod=params["diffMethod"],
+            outFilter=params["outFilter"],
+            outFiltType=params["outFiltType"],
+            outFiltCutOff=params["outFiltCutOff"],
+            outFiltLen=params["outFiltLen"],
+            outFiltPolyOrd=params["outFiltPolyOrd"]
         )
         operation = self.derivations[derivation_id]
         x, y = operation.transform(x, y)
-        print(x)
         plotter = CurvePlotter()
         return plotter.plot(x, y)
     
@@ -973,7 +1135,30 @@ class CurveGenerator:
 
         plotter = CurvePlotter()
         return plotter.plot(time_axis, amplitude)
+    def generate_custom_f0(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        sig_sr, audio_data = wavfile.read(audio_path)
+        if audio_data.ndim > 1:
+            audio_data = audio_data[:, 0]  # Utiliser le premier canal si stéréo
 
+        f0, f0_times = get_f0(
+            audio_data,
+            sig_sr,
+            method=params["method"],
+            hopSize=params["hopSize"],
+            minPitch=params["minPitch"],
+            maxPitch=params["maxPitch"],
+            interpUnvoiced=params["interpUnvoiced"],
+            outFilter=params["outFilter"],
+            outFiltType=params["outFiltType"],
+            outFiltCutOff=params["outFiltCutOff"],
+            outFiltLen=params["outFiltLen"],
+            outFiltPolyOrd=params["outFiltPolyOrd"]
+        )
+
+        operation = self.derivations[derivation_id]
+        x, y = operation.transform(f0_times, f0)
+        plotter = CurvePlotter()
+        return plotter.plot(x, y)
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
     audio_widget: SoundInformation
@@ -1046,6 +1231,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.custom_formant1_params = {}
         self.custom_formant2_params = {}
         self.custom_formant3_params = {}
+        self.custom_f0_params = {}
         for i in range(4):
             panel_widget = PanelWidget(i + 1)
 
@@ -1181,15 +1367,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.audio_path, curve_type_id, curve_derivation_id
             )
         elif curve_type_id == len(self.curve_generator.datasources):
-            if row_id not in self.custom_mfcc_params:
-                return
             params = self.custom_mfcc_params[row_id]
             new_curve = self.curve_generator.generate_custom_mfcc(
                 self.audio_path, params, curve_derivation_id
             )
         elif curve_type_id == len(self.curve_generator.datasources):
-            if row_id not in self.custom_amplitude_params:
-                return
             params = self.custom_amplitude_params[row_id]
             new_curve = self.curve_generator.generate_custom_amplitude(
                 self.audio_path, params, curve_derivation_id
@@ -1215,6 +1397,13 @@ class MainWindow(QtWidgets.QMainWindow):
             new_curve = self.curve_generator.generate_custom_formant3(
                 self.audio_path, params, curve_derivation_id
             )
+        elif curve_type_id == len(self.curve_generator.datasources):
+            if row_id not in self.custom_f0_params:
+                return
+            params = self.custom_f0_params[row_id]
+            new_curve = self.curve_generator.generate_custom_f0(
+                self.audio_path, params, curve_derivation_id
+            )
         else:
             return
 
@@ -1230,6 +1419,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if new_curve is not None:
             panel.panel.add_curve(new_curve)
             self.curves[row_id][0] = new_curve
+
 
     def change_curve_panel(self, row_id: int, new_panel_id: int) -> None:
         if row_id not in self.curves:
@@ -1299,7 +1489,28 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.add_custom_formant2_curve(params["formant2"], params["formant2"]["panel"])
             if params["formant3"]["enabled"]:
                 self.add_custom_formant3_curve(params["formant3"], params["formant3"]["panel"])
+            if params["f0"]["enabled"]:
+                self.add_custom_f0_curve(params["f0"], params["f0"]["panel"])
 
+    def add_custom_f0_curve(self, params, panel_id):
+        derivation_id = 0  # Par défaut à la trajectoire ; modifiez si nécessaire
+        curve_values = self.curve_generator.generate_custom_f0(self.audio_path, params, derivation_id)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(params["name"])
+        index = item._curve_type.findText(params["name"])
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_f0_params[row_id] = params
     def add_custom_formant1_curve(self, params, panel_id):
         curve_values = self.curve_generator.generate_custom_formant1(self.audio_path, params, 0)
         panel = self.panels[panel_id].panel
