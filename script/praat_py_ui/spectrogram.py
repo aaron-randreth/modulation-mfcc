@@ -94,35 +94,6 @@ class Spectrogram(pg.ImageItem):
         self.setRect(rect)
 
 
-def create_spectrogram_plot(
-    frequency_samples: npt.NDArray[np.float64],
-    time_segments: npt.NDArray[np.float64],
-    spect_data: npt.NDArray[np.float64],
-    left_label: str = "Fréquence",
-    bottom_label: str = "Temps",
-) -> pg.PlotDataItem:
-
-    # Create a PlotDataItem (plot area) for displaying the image
-    plot_item = pg.plot()
-
-    # Add labels to the axis
-    plot_item.setLabel("left", left_label, units="Hz")
-    plot_item.setLabel("bottom", bottom_label, units="s")
-
-    # Item for displaying image data
-    img = Spectrogram(frequency_samples, time_segments, spect_data)
-
-    plot_item.addItem(img)
-
-    # Limit panning/zooming to the spectrogram
-    plot_item.setLimits(
-        xMin=0, xMax=max(time_segments), yMin=0, yMax=max(frequency_samples)
-    )
-    plot_item.setMouseEnabled(x=True, y=False)
-    plot_item.getPlotItem().hideAxis('bottom')
-
-    return plot_item
-
 def _example_scipy_spectrogram():
     rng = np.random.default_rng()
     fs = 10e3
@@ -140,8 +111,3 @@ def _example_scipy_spectrogram():
     x = carrier + noise
     return scipy.signal.spectrogram(x, fs)
 
-
-if __name__ == "__main__":
-    f, t, Sxx = _example_scipy_spectrogram()
-    plot = create_spectrogram_plot(f, t, Sxx)
-    pg.exec()
