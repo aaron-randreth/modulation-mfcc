@@ -1,19 +1,19 @@
 import os
 import sys
 import numpy as np
-
+from pydub.playback import play
 from abc import ABC, abstractmethod
 from typing import override
-
+import threading
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
-
+from pydub import AudioSegment
 import parselmouth
 import tgt
 import sounddevice as sd
 import wave
 from PyQt5.QtWidgets import QFileDialog
-
+import time
 from scipy.io import wavfile
 
 from mfcc import load_channel, get_MFCCS_change
@@ -835,7 +835,7 @@ class Mfcc(DataSource):
         # Paramètres pour la fonction get_MFCCS_change
         sig_sr = 10000  # Fréquence d'échantillonnage pour l'analyse
         channel_n = 0  # Numéro du canal pour les fichiers audio multicanaux
-        t_step = 0.001  # Pas de temps pour l'analyse en secondes
+        t_step = 0.005  # Pas de temps pour l'analyse en secondes
         win_len = 0.025  # Longueur de la fenêtre d'analyse en secondes
         n_mfcc = 13  # Nombre de MFCC à calculer
         n_fft = 512  # Nombre de points pour la FFT
@@ -1249,7 +1249,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
         self.timer.start(100)  # Update plot every 100 ms
-
+        # Add playback state
+        self.playing = False
+        self.audio_cursor = pg.LinearRegionItem()
+        self.audio_cursor.setBrush(pg.mkBrush(0, 255, 0, 50))  # Green with some transparency
+        self.audio_widget.sound_plot.addItem(self.audio_cursor)
+        self.audio_cursor.hide()
     def init_main_layout(self) -> None:
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
@@ -1301,11 +1306,15 @@ class MainWindow(QtWidgets.QMainWindow):
         load_group_box.setLayout(load_layout)
         return load_group_box
 
+
     def create_audio_control_buttons(self) -> QtWidgets.QGroupBox:
         audio_control_group_box = QtWidgets.QGroupBox("Audio Control")
         audio_control_layout = QtWidgets.QVBoxLayout()
 
         play_button = StyledButton("Play Selected Region")
+
+
+        play_button.clicked.connect(self.play_selected_region)
 
         audio_control_layout.addWidget(play_button)
 
@@ -1651,7 +1660,39 @@ class MainWindow(QtWidgets.QMainWindow):
             audio_data = np.concatenate(self.frames, axis=0)
             self.audio_widget.update_audio_waveform(audio_data)
 
+    def play_selected_region(self):
+        if not self.audio_path:
+            return
 
+        region = self.audio_widget.selection_region.getRegion()
+        start, end = region
+        duration = end - start
+        audio = AudioSegment.from_wav(self.audio_path)
+        selected_audio = audio[start * 1000:end * 1000]
+
+        def play_audio():
+            self.playing = True
+            play(selected_audio)
+            self.playing = False
+
+        threading.Thread(target=play_audio).start()
+
+        self.audio_cursor.setRegion([start, start])
+        self.audio_cursor.show()
+        threading.Thread(target=self.animate_cursor, args=(start, end, duration)).start()
+
+    def animate_cursor(self, start, end, duration):
+        start_time = time.time()
+        while time.time() - start_time < duration:
+            elapsed_time = time.time() - start_time
+            current_pos = start + elapsed_time
+            self.audio_cursor.setRegion([start, current_pos])
+            time.sleep(0.01)
+        self.stop_audio()
+
+    def stop_audio(self):
+        self.audio_cursor.hide()
+        self.playing = False
 if __name__ == "__main__":
     pg.setConfigOptions(foreground="black", background="w")
     app = QtWidgets.QApplication(sys.argv)
