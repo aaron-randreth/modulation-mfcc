@@ -599,9 +599,9 @@ class Dashboard(QtWidgets.QTreeWidget):
     row_count: int
     headers: list[str]
 
-    def __init__(self) -> None:
+    def __init__(self,custom_curves) -> None:
         super().__init__()
-
+        self.custom_curves = custom_curves  # Store custom curves
         self.row_count = 0
         self.headers = ["Acoustique", "EMA", "Couleur", "Panel", "Show", "Dérivée"]
 
@@ -609,6 +609,13 @@ class Dashboard(QtWidgets.QTreeWidget):
         self.setHeaderLabels(self.headers)
         self.resize_column()
 
+    def update_curve_choices(self, item):
+        # Add default curve choices
+        item._curve_type.addItems(["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"])
+        
+        # Add custom curve choices
+        for custom_curve_name in self.custom_curves:
+            item._curve_type.addItem(custom_curve_name)
         # for _ in range(4):
         #     self.append_row()
 
@@ -651,10 +658,10 @@ class DashboardWidget(QtWidgets.QWidget):
     dashboard: Dashboard
     row_added = QtCore.pyqtSignal(int)
 
-    def __init__(self) -> None:
+    def __init__(self, custom_curves) -> None:
         super().__init__()
 
-        self.dashboard = Dashboard()
+        self.dashboard = Dashboard(custom_curves)  # Pass custom_curves here
 
         add_row_button = StyledButton("+", "lightgreen")
         add_row_button.clicked.connect(self._row_added)
@@ -669,6 +676,7 @@ class DashboardWidget(QtWidgets.QWidget):
     def _row_added(self) -> None:
         self.dashboard.append_row()
         self.row_added.emit(self.dashboard.row_count)
+
 
 
 class FileLoadIndicator(QtWidgets.QGroupBox):
@@ -1173,7 +1181,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.init_main_layout()
-
+        self.custom_curves = {}  # Dictionary to store custom curve configurations
         self.audio_path = None
         self.audio_widget = SoundInformation()
 
@@ -1182,8 +1190,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
         self.curve_generator = CurveGenerator()
-        self.dashboard_widget = DashboardWidget()
-
+        self.dashboard_widget = DashboardWidget(self.custom_curves)  # Pass custom_curves
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -1194,7 +1201,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.tier_selection = TierSelection()
         self.config_mfcc_button = StyledButton("Configure")
-
+        self.custom_curves = {}  # Dictionary to store custom curve configurations
         self.tier_selection.tier_checked.connect(
             lambda tier_name: self.annotation_widget.display(
                 self.annotation_data.get_tier_by_name(tier_name)
@@ -1365,71 +1372,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tier_selection.set_data(self.annotation_data)
 
-    def update_curve(self, row_id: int, curve_type_id: int, curve_derivation_id: int) -> None:
-        if not self.audio_path:
-            return
-
-        old_curve, panel = self.curves.get(row_id, [None, None])
-        new_curve = None
-        if curve_type_id >= 0 and curve_type_id < len(self.curve_generator.datasources):
-            new_curve = self.curve_generator.generate(
-                self.audio_path, curve_type_id, curve_derivation_id
-            )
-        elif curve_type_id == len(self.curve_generator.datasources):
-            params = self.custom_mfcc_params[row_id]
-            new_curve = self.curve_generator.generate_custom_mfcc(
-                self.audio_path, params, curve_derivation_id
-            )
-        elif curve_type_id == len(self.curve_generator.datasources):
-            params = self.custom_amplitude_params[row_id]
-            new_curve = self.curve_generator.generate_custom_amplitude(
-                self.audio_path, params, curve_derivation_id
-            )
-        elif curve_type_id == len(self.curve_generator.datasources):
-            if row_id not in self.custom_formant1_params:
-                return
-            params = self.custom_formant1_params[row_id]
-            new_curve = self.curve_generator.generate_custom_formant1(
-                self.audio_path, params, curve_derivation_id
-            )
-        elif curve_type_id == len(self.curve_generator.datasources):
-            if row_id not in self.custom_formant2_params:
-                return
-            params = self.custom_formant2_params[row_id]
-            new_curve = self.curve_generator.generate_custom_formant2(
-                self.audio_path, params, curve_derivation_id
-            )
-        elif curve_type_id == len(self.curve_generator.datasources):
-            if row_id not in self.custom_formant3_params:
-                return
-            params = self.custom_formant3_params[row_id]
-            new_curve = self.curve_generator.generate_custom_formant3(
-                self.audio_path, params, curve_derivation_id
-            )
-        elif curve_type_id == len(self.curve_generator.datasources):
-            if row_id not in self.custom_f0_params:
-                return
-            params = self.custom_f0_params[row_id]
-            new_curve = self.curve_generator.generate_custom_f0(
-                self.audio_path, params, curve_derivation_id
-            )
-        else:
-            return
-
-        if panel is None:
-            return
-
-        if old_curve is not None:
-            try:
-                panel.panel.remove_curve(old_curve)
-            except ValueError:
-                pass
-
-        if new_curve is not None:
-            panel.panel.add_curve(new_curve)
-            self.curves[row_id][0] = new_curve
-
-
     def change_curve_panel(self, row_id: int, new_panel_id: int) -> None:
         if row_id not in self.curves:
             return
@@ -1470,6 +1412,45 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             curve.hide()
 
+    def update_curve(self, row_id: int, curve_type_id: int, curve_derivation_id: int) -> None:
+        if not self.audio_path:
+            return
+
+        old_curve, panel = self.curves.get(row_id, [None, None])
+        new_curve = None
+
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        curve_name = item._curve_type.currentText()
+        
+        # Check if the curve_name is in custom_curves
+        if curve_name in self.custom_curves:
+            custom_curve_config = self.custom_curves[curve_name]
+            generator_function = custom_curve_config['generator_function']
+            params = custom_curve_config['params']
+            new_curve = generator_function(self.audio_path, params, curve_derivation_id)
+        else:
+            # Default curve generation
+            if curve_type_id >= 0 and curve_type_id < len(self.curve_generator.datasources):
+                new_curve = self.curve_generator.generate(
+                    self.audio_path, curve_type_id, curve_derivation_id
+                )
+            else:
+                return
+
+        if panel is None:
+            return
+
+        if old_curve is not None:
+            try:
+                panel.panel.remove_curve(old_curve)
+            except ValueError:
+                pass
+
+        if new_curve is not None:
+            panel.panel.add_curve(new_curve)
+            self.curves[row_id][0] = new_curve
+
+
     def handle_new_row(self, row_count: int) -> None:
         new_row_id = row_count - 1
 
@@ -1489,17 +1470,41 @@ class MainWindow(QtWidgets.QMainWindow):
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             params = dialog.get_parameters()
             if params["mfcc"]["enabled"]:
-                self.add_custom_mfcc_curve(params["mfcc"], params["mfcc"]["panel"])
+                self.add_custom_curve(params["mfcc"], params["mfcc"]["panel"], "Custom MFCC", self.curve_generator.generate_custom_mfcc)
             if params["amplitude"]["enabled"]:
-                self.add_custom_amplitude_curve(params["amplitude"], params["amplitude"]["panel"])
+                self.add_custom_curve(params["amplitude"], params["amplitude"]["panel"], "Custom Amplitude", self.curve_generator.generate_custom_amplitude)
             if params["formant1"]["enabled"]:
-                self.add_custom_formant1_curve(params["formant1"], params["formant1"]["panel"])
+                self.add_custom_curve(params["formant1"], params["formant1"]["panel"], "Custom Formant1", self.curve_generator.generate_custom_formant1)
             if params["formant2"]["enabled"]:
-                self.add_custom_formant2_curve(params["formant2"], params["formant2"]["panel"])
+                self.add_custom_curve(params["formant2"], params["formant2"]["panel"], "Custom Formant2", self.curve_generator.generate_custom_formant2)
             if params["formant3"]["enabled"]:
-                self.add_custom_formant3_curve(params["formant3"], params["formant3"]["panel"])
+                self.add_custom_curve(params["formant3"], params["formant3"]["panel"], "Custom Formant3", self.curve_generator.generate_custom_formant3)
             if params["f0"]["enabled"]:
-                self.add_custom_f0_curve(params["f0"], params["f0"]["panel"])
+                self.add_custom_curve(params["f0"], params["f0"]["panel"], "Custom F0", self.curve_generator.generate_custom_f0)
+
+    def add_custom_curve(self, params, panel_id, curve_name, generator_function):
+        derivation_id = 0  # Default to trajectory; modify as needed
+        curve_values = generator_function(self.audio_path, params, derivation_id)
+        panel = self.panels[panel_id].panel
+        panel.add_curve(curve_values)
+
+        self.dashboard_widget.dashboard.append_row()
+        row_id = self.dashboard_widget.dashboard.row_count - 1
+        item = self.dashboard_widget.dashboard.topLevelItem(row_id)
+        
+        item._curve_type.addItem(curve_name)
+        index = item._curve_type.findText(curve_name)
+        if index != -1:
+            item._curve_type.setCurrentIndex(index)
+        
+        item.panel_choice.setCurrentIndex(panel_id)
+        
+        self.curves[row_id] = [curve_values, self.panels[panel_id]]
+        self.custom_curves[curve_name] = {
+            'params': params,
+            'panel_id': panel_id,
+            'generator_function': generator_function
+        }
 
     def add_custom_f0_curve(self, params, panel_id):
         derivation_id = 0  # Par défaut à la trajectoire ; modifiez si nécessaire
