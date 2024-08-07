@@ -17,7 +17,7 @@ import time
 from scipy.io import wavfile
 
 from mfcc import load_channel, get_MFCCS_change
-from calc import calc_formants, calculate_amplitude_envelope,get_f0
+from calc import calc_formants, calculate_amplitude_envelope,get_f0,get_velocity
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
@@ -28,6 +28,10 @@ from quadruple_axis_plot_item import (
     SoundInformation,
     DisplayInterval,
 )
+
+
+
+
 class UnifiedConfigDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -814,14 +818,16 @@ class Velocity(Transformation):
 
     @override
     def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        return x, np.gradient(y)
+        velocity = get_velocity(y, sr=1.0, difference=1, method='gradient')  # Remplacez sr=1.0 par votre taux d'échantillonnage réel
+        return x, velocity
 
 
 class Acceleration(Transformation):
 
     @override
     def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        return x, np.gradient(np.gradient(y))
+        acceleration = get_velocity(y, sr=1.0, difference=2, method='gradient')  # Remplacez sr=1.0 par votre taux d'échantillonnage réel
+        return x, acceleration
 
 
 class Soundwave(DataSource):
@@ -1482,7 +1488,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if params["f0"]["enabled"]:
                 self.add_custom_curve(params["f0"], params["f0"]["panel"], "Custom F0", self.curve_generator.generate_custom_f0)
 
-    def add_custom_curve(self, params, panel_id, curve_name, generator_function):
+    def add_custom_curve(self, params, panel_id, default_curve_name, generator_function):
         derivation_id = 0  # Default to trajectory; modify as needed
         curve_values = generator_function(self.audio_path, params, derivation_id)
         panel = self.panels[panel_id].panel
@@ -1491,21 +1497,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
+        # Use the provided curve name if it exists, otherwise default to the parameter name
+        curve_name = params.get("name", default_curve_name)
         item._curve_type.addItem(curve_name)
         index = item._curve_type.findText(curve_name)
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_curves[curve_name] = {
             'params': params,
             'panel_id': panel_id,
             'generator_function': generator_function
         }
-
     def add_custom_f0_curve(self, params, panel_id):
         derivation_id = 0  # Par défaut à la trajectoire ; modifiez si nécessaire
         curve_values = self.curve_generator.generate_custom_f0(self.audio_path, params, derivation_id)
