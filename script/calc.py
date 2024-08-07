@@ -15,6 +15,9 @@ from scipy.interpolate import interp1d
 from scipy import interpolate
 import copy
 
+
+from findiff import FinDiff
+
 def applyFilter(
                  x:npt.NDArray,
                 sr,
@@ -583,7 +586,64 @@ def get_f0(x:npt.NDArray,
         f0=applyFilter(f0,1/hopSize,filt=outFilter,cutOff=outFiltCutOff, filtLen=outFiltLen, filtType=outFiltType,polyOrd=outFiltPolyOrd)
     
     return f0,f0t
+def get_velocity(
+        x: np.ndarray,
+        sr: float,
+        difference: int = 1,
+        method: str = 'gradient', 
+        width: int = 3, 
+        accOrder: int = 2,
+        polyOrder: int = 2
+        ):
+    """
+    Calcule la première ou la deuxième dérivée du signal x échantillonné à la fréquence sr selon 
+    la méthode définie par 'method'. Si 'method' est 'sg' (Savitsky-Golay),
+    les dérivées sont calculées en considérant 'width' points à la fois et en approximant 
+    le signal avec un polynôme d'ordre 'polyOrder'. Si 'method' est 'finDiff', 
+    la dérivée est calculée en utilisant des stencils avec une précision donnée par 'accOrder'.
+    Les stencils sont fournis par le module findiff, Savitsky-Golay est celui trouvé dans 
+    scipy.signal.
 
+    Paramètres
+    ----------
+    x : np.ndarray
+        signal d'entrée.
+    sr : float
+        taux d'échantillonnage.
+    difference : int (1 ou 2), optionnel
+        première ou deuxième dérivée. La valeur par défaut est 1.
+    method : str, optionnel
+        la méthode peut être 'gradient', 'sg' (Savitsky-Golay) ou 'finDiff'. La valeur par défaut est 'gradient'.
+    width : int, optionnel
+        Le nombre de valeurs du signal considéré pour chaque différence. La valeur par défaut est 3.
+    accOrder : int, optionnel
+        ordre de précision de la méthode finDiff.
+    polyOrder : int, optionnel
+        L'ordre du polynôme utilisé pour approximer le signal si la méthode adoptée est 'sg'.
+        La valeur par défaut est 2.
+
+    Retourne
+    -------
+    np.ndarray:
+        Signal de dérivée (vitesse ou accélération).
+    """
+    
+    if method == 'finDiff':
+        dFun = FinDiff(0, 1/sr, difference, acc=accOrder)
+        y = dFun(x)
+        
+    elif method == 'sg':
+        y = savgol_filter(x, width, polyOrder, deriv=difference, axis=0, mode='interp')
+    
+    elif method == 'gradient':
+        for _ in range(difference):
+            x = np.gradient(x, 1/sr)
+        y = x
+    
+    else:
+        raise ValueError("Méthode inconnue. Utilisez 'gradient', 'sg' ou 'finDiff'.")
+    
+    return y
 class MinMaxFinder:
     def find_in_interval(self, times: list[float], values: list[float], interval: tuple[float, float]) -> tuple[np.ndarray[float], np.ndarray[float]]:
         start, end = interval
