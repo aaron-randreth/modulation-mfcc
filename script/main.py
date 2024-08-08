@@ -55,7 +55,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.mfcc_remove_first_input = self.create_input_field("Remove First MFCC (1/0):", "1")
         self.mfcc_filt_cutoff_input = self.create_input_field("Filter Cutoff Frequency (Hz):", "12")
         self.mfcc_filt_ord_input = self.create_input_field("Filter Order:", "6")
-        self.mfcc_diff_method_input = self.create_input_field("Diff Method (grad/sg):", "grad")
+        self.mfcc_diff_method_input = self.create_input_field("Diff Method (grad/sg/finDiff):", "grad")
         self.mfcc_out_filter_input = self.create_input_field("Output Filter (None/iir/fir/sg):", "iir")
         self.mfcc_out_filt_type_input = self.create_input_field("Filter Type (low/band):", "low")
         self.mfcc_out_filt_cutoff_input = self.create_input_field("Output Filter Cutoff (Hz):", "12")
@@ -84,6 +84,13 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.mfcc_derivative_widget = QtWidgets.QWidget()
         self.mfcc_derivative_widget.setLayout(derivative_layout)
         
+        self.mfcc_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.mfcc_width_input = self.create_input_field("SG Width:", "3")
+        self.mfcc_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.mfcc_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+        
+        self.mfcc_derivative_group.buttonClicked.connect(self.toggle_mfcc_derivative_fields)
+        self.toggle_mfcc_derivative_fields()
         # Checkbox for enabling/disabling Amplitude customization
         self.amp_enable_checkbox = QtWidgets.QCheckBox("Enable Amplitude Customization")
         self.amp_enable_checkbox.setChecked(True)
@@ -121,6 +128,14 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.amp_derivative_widget = QtWidgets.QWidget()
         self.amp_derivative_widget.setLayout(derivative_layout)
 
+        self.amp_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.amp_width_input = self.create_input_field("SG Width:", "3")
+        self.amp_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.amp_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+
+        self.amp_derivative_group.buttonClicked.connect(self.toggle_amp_derivative_fields)
+        self.toggle_amp_derivative_fields()
+
         # Checkbox for enabling/disabling Formant1 customization
         self.formant1_enable_checkbox = QtWidgets.QCheckBox("Enable Formant1 Customization")
         self.formant1_enable_checkbox.setChecked(True)
@@ -154,6 +169,14 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         derivative_layout.addWidget(self.formant1_acc_radio)
         self.formant1_derivative_widget = QtWidgets.QWidget()
         self.formant1_derivative_widget.setLayout(derivative_layout)
+
+        self.formant1_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.formant1_width_input = self.create_input_field("SG Width:", "3")
+        self.formant1_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.formant1_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+
+        self.formant1_derivative_group.buttonClicked.connect(self.toggle_formant1_derivative_fields)
+        self.toggle_formant1_derivative_fields()
 
         # Checkbox for enabling/disabling Formant2 customization
         self.formant2_enable_checkbox = QtWidgets.QCheckBox("Enable Formant2 Customization")
@@ -189,6 +212,14 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant2_derivative_widget = QtWidgets.QWidget()
         self.formant2_derivative_widget.setLayout(derivative_layout)
 
+        self.formant2_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.formant2_width_input = self.create_input_field("SG Width:", "3")
+        self.formant2_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.formant2_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+
+        self.formant2_derivative_group.buttonClicked.connect(self.toggle_formant2_derivative_fields)
+        self.toggle_formant2_derivative_fields()
+
         # Checkbox for enabling/disabling Formant3 customization
         self.formant3_enable_checkbox = QtWidgets.QCheckBox("Enable Formant3 Customization")
         self.formant3_enable_checkbox.setChecked(True)
@@ -222,6 +253,14 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         derivative_layout.addWidget(self.formant3_acc_radio)
         self.formant3_derivative_widget = QtWidgets.QWidget()
         self.formant3_derivative_widget.setLayout(derivative_layout)
+
+        self.formant3_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.formant3_width_input = self.create_input_field("SG Width:", "3")
+        self.formant3_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.formant3_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+
+        self.formant3_derivative_group.buttonClicked.connect(self.toggle_formant3_derivative_fields)
+        self.toggle_formant3_derivative_fields()
 
         # F0 Configuration
         self.f0_enable_checkbox = QtWidgets.QCheckBox("Enable F0 Customization")
@@ -260,6 +299,14 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.f0_derivative_widget = QtWidgets.QWidget()
         self.f0_derivative_widget.setLayout(derivative_layout)
 
+        self.f0_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.f0_width_input = self.create_input_field("SG Width:", "3")
+        self.f0_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.f0_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+
+        self.f0_derivative_group.buttonClicked.connect(self.toggle_f0_derivative_fields)
+        self.toggle_f0_derivative_fields()
+
         self.apply_button = QtWidgets.QPushButton("Apply")
         self.apply_button.clicked.connect(self.accept)
         self.add_groupbox_to_layout("MFCC Configuration", [
@@ -280,7 +327,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.mfcc_out_filt_polyord_input,
             self.mfcc_name_input,
             (QtWidgets.QLabel("MFCC Panel:"), self.mfcc_panel_choice),
-            self.mfcc_derivative_widget
+            self.mfcc_derivative_widget,
+            self.mfcc_derivative_method_input,
+            self.mfcc_width_input,
+            self.mfcc_acc_order_input,
+            self.mfcc_poly_order_input,
         ], scroll_layout, 0, 0)
 
         self.add_groupbox_to_layout("Amplitude Configuration", [
@@ -296,7 +347,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.amp_outfilt_polyord_input,
             self.amp_name_input,
             (QtWidgets.QLabel("Amplitude Panel:"), self.amp_panel_choice),
-            self.amp_derivative_widget
+            self.amp_derivative_widget,
+            self.amp_derivative_method_input,
+            self.amp_width_input,
+            self.amp_acc_order_input,
+            self.amp_poly_order_input,
         ], scroll_layout, 0, 1)
 
         self.add_groupbox_to_layout("Formant1 Configuration", [
@@ -309,7 +364,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant1_pre_emphasis_input,
             self.formant1_name_input,
             (QtWidgets.QLabel("Formant1 Panel:"), self.formant1_panel_choice),
-            self.formant1_derivative_widget
+            self.formant1_derivative_widget,
+            self.formant1_derivative_method_input,
+            self.formant1_width_input,
+            self.formant1_acc_order_input,
+            self.formant1_poly_order_input,
         ], scroll_layout, 0, 2)
 
         self.add_groupbox_to_layout("Formant2 Configuration", [
@@ -322,7 +381,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant2_pre_emphasis_input,
             self.formant2_name_input,
             (QtWidgets.QLabel("Formant2 Panel:"), self.formant2_panel_choice),
-            self.formant2_derivative_widget
+            self.formant2_derivative_widget,
+            self.formant2_derivative_method_input,
+            self.formant2_width_input,
+            self.formant2_acc_order_input,
+            self.formant2_poly_order_input,
         ], scroll_layout, 1, 0)
 
         self.add_groupbox_to_layout("Formant3 Configuration", [
@@ -335,7 +398,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant3_pre_emphasis_input,
             self.formant3_name_input,
             (QtWidgets.QLabel("Formant3 Panel:"), self.formant3_panel_choice),
-            self.formant3_derivative_widget
+            self.formant3_derivative_widget,
+            self.formant3_derivative_method_input,
+            self.formant3_width_input,
+            self.formant3_acc_order_input,
+            self.formant3_poly_order_input,
         ], scroll_layout, 1, 1)
 
         self.add_groupbox_to_layout("F0 Configuration", [
@@ -352,14 +419,17 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.f0_out_filt_polyord_input,
             self.f0_name_input,
             (QtWidgets.QLabel("F0 Panel:"), self.f0_panel_choice),
-            self.f0_derivative_widget
+            self.f0_derivative_widget,
+            self.f0_derivative_method_input,
+            self.f0_width_input,
+            self.f0_acc_order_input,
+            self.f0_poly_order_input,
         ], scroll_layout, 1, 2)
 
         scroll_layout.addWidget(self.apply_button, 2, 0, 1, 3)
 
         self.layout.addWidget(scroll_area)
         self.setLayout(self.layout)
-
 
     def create_input_field(self, label_text, default_value):
         label = QtWidgets.QLabel(label_text)
@@ -421,7 +491,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "outFiltPolyOrd": int(self.mfcc_out_filt_polyord_input[1].text()),
                 "name": self.mfcc_name_input[1].text(),
                 "panel": int(self.mfcc_panel_choice.currentIndex()),
-                "derivation_type": 0 if self.mfcc_traj_radio.isChecked() else 1 if self.mfcc_vel_radio.isChecked() else 2
+                "derivation_type": 0 if self.mfcc_traj_radio.isChecked() else 1 if self.mfcc_vel_radio.isChecked() else 2,
+                "derivative_method": self.mfcc_derivative_method_input[1].text(),
+                "sg_width": int(self.mfcc_width_input[1].text()),
+                "fin_diff_acc_order": int(self.mfcc_acc_order_input[1].text()),
+                "sg_poly_order": int(self.mfcc_poly_order_input[1].text()),
             },
             "amplitude": {
                 "enabled": amp_enabled,
@@ -436,7 +510,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "outFiltPolyOrd": int(self.amp_outfilt_polyord_input[1].text()),
                 "name": self.amp_name_input[1].text(),
                 "panel": int(self.amp_panel_choice.currentIndex()),
-                "derivation_type": 0 if self.amp_traj_radio.isChecked() else 1 if self.amp_vel_radio.isChecked() else 2
+                "derivation_type": 0 if self.amp_traj_radio.isChecked() else 1 if self.amp_vel_radio.isChecked() else 2,
+                "derivative_method": self.amp_derivative_method_input[1].text(),
+                "sg_width": int(self.amp_width_input[1].text()),
+                "fin_diff_acc_order": int(self.amp_acc_order_input[1].text()),
+                "sg_poly_order": int(self.amp_poly_order_input[1].text()),
             },
             "formant1": {
                 "enabled": formant1_enabled,
@@ -448,7 +526,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "pre_emphasis_from": float(self.formant1_pre_emphasis_input[1].text()),
                 "name": self.formant1_name_input[1].text(),
                 "panel": int(self.formant1_panel_choice.currentIndex()),
-                "derivation_type": 0 if self.formant1_traj_radio.isChecked() else 1 if self.formant1_vel_radio.isChecked() else 2
+                "derivation_type": 0 if self.formant1_traj_radio.isChecked() else 1 if self.formant1_vel_radio.isChecked() else 2,
+                "derivative_method": self.formant1_derivative_method_input[1].text(),
+                "sg_width": int(self.formant1_width_input[1].text()),
+                "fin_diff_acc_order": int(self.formant1_acc_order_input[1].text()),
+                "sg_poly_order": int(self.formant1_poly_order_input[1].text()),
             },
             "formant2": {
                 "enabled": formant2_enabled,
@@ -460,7 +542,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "pre_emphasis_from": float(self.formant2_pre_emphasis_input[1].text()),
                 "name": self.formant2_name_input[1].text(),
                 "panel": int(self.formant2_panel_choice.currentIndex()),
-                "derivation_type": 0 if self.formant2_traj_radio.isChecked() else 1 if self.formant2_vel_radio.isChecked() else 2
+                "derivation_type": 0 if self.formant2_traj_radio.isChecked() else 1 if self.formant2_vel_radio.isChecked() else 2,
+                "derivative_method": self.formant2_derivative_method_input[1].text(),
+                "sg_width": int(self.formant2_width_input[1].text()),
+                "fin_diff_acc_order": int(self.formant2_acc_order_input[1].text()),
+                "sg_poly_order": int(self.formant2_poly_order_input[1].text()),
             },
             "formant3": {
                 "enabled": formant3_enabled,
@@ -472,7 +558,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "pre_emphasis_from": float(self.formant3_pre_emphasis_input[1].text()),
                 "name": self.formant3_name_input[1].text(),
                 "panel": int(self.formant3_panel_choice.currentIndex()),
-                "derivation_type": 0 if self.formant3_traj_radio.isChecked() else 1 if self.formant3_vel_radio.isChecked() else 2
+                "derivation_type": 0 if self.formant3_traj_radio.isChecked() else 1 if self.formant3_vel_radio.isChecked() else 2,
+                "derivative_method": self.formant3_derivative_method_input[1].text(),
+                "sg_width": int(self.formant3_width_input[1].text()),
+                "fin_diff_acc_order": int(self.formant3_acc_order_input[1].text()),
+                "sg_poly_order": int(self.formant3_poly_order_input[1].text()),
             },
             "f0": {
                 "enabled": f0_enabled,
@@ -488,7 +578,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "outFiltPolyOrd": int(self.f0_out_filt_polyord_input[1].text()),
                 "name": self.f0_name_input[1].text(),
                 "panel": int(self.f0_panel_choice.currentIndex()),
-                "derivation_type": 0 if self.f0_traj_radio.isChecked() else 1 if self.f0_vel_radio.isChecked() else 2
+                "derivation_type": 0 if self.f0_traj_radio.isChecked() else 1 if self.f0_vel_radio.isChecked() else 2,
+                "derivative_method": self.f0_derivative_method_input[1].text(),
+                "sg_width": int(self.f0_width_input[1].text()),
+                "fin_diff_acc_order": int(self.f0_acc_order_input[1].text()),
+                "sg_poly_order": int(self.f0_poly_order_input[1].text()),
             }
         }
         return params
@@ -515,6 +609,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         ]:
             widget.setEnabled(enabled)
         self.mfcc_derivative_widget.setEnabled(enabled)
+        self.mfcc_derivative_method_input[1].setEnabled(enabled)
+        self.mfcc_width_input[1].setEnabled(enabled and (self.mfcc_vel_radio.isChecked() or self.mfcc_acc_radio.isChecked()))
+        self.mfcc_acc_order_input[1].setEnabled(enabled and (self.mfcc_vel_radio.isChecked() or self.mfcc_acc_radio.isChecked()))
+        self.mfcc_poly_order_input[1].setEnabled(enabled and (self.mfcc_vel_radio.isChecked() or self.mfcc_acc_radio.isChecked()))
 
     def toggle_amp_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -533,6 +631,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         ]:
             widget.setEnabled(enabled)
         self.amp_derivative_widget.setEnabled(enabled)
+        self.amp_derivative_method_input[1].setEnabled(enabled)
+        self.amp_width_input[1].setEnabled(enabled and (self.amp_vel_radio.isChecked() or self.amp_acc_radio.isChecked()))
+        self.amp_acc_order_input[1].setEnabled(enabled and (self.amp_vel_radio.isChecked() or self.amp_acc_radio.isChecked()))
+        self.amp_poly_order_input[1].setEnabled(enabled and (self.amp_vel_radio.isChecked() or self.amp_acc_radio.isChecked()))
 
     def toggle_formant1_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -548,6 +650,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         ]:
             widget.setEnabled(enabled)
         self.formant1_derivative_widget.setEnabled(enabled)
+        self.formant1_derivative_method_input[1].setEnabled(enabled)
+        self.formant1_width_input[1].setEnabled(enabled and (self.formant1_vel_radio.isChecked() or self.formant1_acc_radio.isChecked()))
+        self.formant1_acc_order_input[1].setEnabled(enabled and (self.formant1_vel_radio.isChecked() or self.formant1_acc_radio.isChecked()))
+        self.formant1_poly_order_input[1].setEnabled(enabled and (self.formant1_vel_radio.isChecked() or self.formant1_acc_radio.isChecked()))
 
     def toggle_formant2_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -563,6 +669,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         ]:
             widget.setEnabled(enabled)
         self.formant2_derivative_widget.setEnabled(enabled)
+        self.formant2_derivative_method_input[1].setEnabled(enabled)
+        self.formant2_width_input[1].setEnabled(enabled and (self.formant2_vel_radio.isChecked() or self.formant2_acc_radio.isChecked()))
+        self.formant2_acc_order_input[1].setEnabled(enabled and (self.formant2_vel_radio.isChecked() or self.formant2_acc_radio.isChecked()))
+        self.formant2_poly_order_input[1].setEnabled(enabled and (self.formant2_vel_radio.isChecked() or self.formant2_acc_radio.isChecked()))
 
     def toggle_formant3_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -578,6 +688,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         ]:
             widget.setEnabled(enabled)
         self.formant3_derivative_widget.setEnabled(enabled)
+        self.formant3_derivative_method_input[1].setEnabled(enabled)
+        self.formant3_width_input[1].setEnabled(enabled and (self.formant3_vel_radio.isChecked() or self.formant3_acc_radio.isChecked()))
+        self.formant3_acc_order_input[1].setEnabled(enabled and (self.formant3_vel_radio.isChecked() or self.formant3_acc_radio.isChecked()))
+        self.formant3_poly_order_input[1].setEnabled(enabled and (self.formant3_vel_radio.isChecked() or self.formant3_acc_radio.isChecked()))
 
     def toggle_f0_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -597,6 +711,53 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         ]:
             widget.setEnabled(enabled)
         self.f0_derivative_widget.setEnabled(enabled)
+        self.f0_derivative_method_input[1].setEnabled(enabled)
+        self.f0_width_input[1].setEnabled(enabled and (self.f0_vel_radio.isChecked() or self.f0_acc_radio.isChecked()))
+        self.f0_acc_order_input[1].setEnabled(enabled and (self.f0_vel_radio.isChecked() or self.f0_acc_radio.isChecked()))
+        self.f0_poly_order_input[1].setEnabled(enabled and (self.f0_vel_radio.isChecked() or self.f0_acc_radio.isChecked()))
+
+    def toggle_mfcc_derivative_fields(self):
+        enabled = self.mfcc_vel_radio.isChecked() or self.mfcc_acc_radio.isChecked()
+        self.mfcc_derivative_method_input[1].setEnabled(enabled)
+        self.mfcc_width_input[1].setEnabled(enabled)
+        self.mfcc_acc_order_input[1].setEnabled(enabled)
+        self.mfcc_poly_order_input[1].setEnabled(enabled)
+
+    def toggle_amp_derivative_fields(self):
+        enabled = self.amp_vel_radio.isChecked() or self.amp_acc_radio.isChecked()
+        self.amp_derivative_method_input[1].setEnabled(enabled)
+        self.amp_width_input[1].setEnabled(enabled)
+        self.amp_acc_order_input[1].setEnabled(enabled)
+        self.amp_poly_order_input[1].setEnabled(enabled)
+
+    def toggle_formant1_derivative_fields(self):
+        enabled = self.formant1_vel_radio.isChecked() or self.formant1_acc_radio.isChecked()
+        self.formant1_derivative_method_input[1].setEnabled(enabled)
+        self.formant1_width_input[1].setEnabled(enabled)
+        self.formant1_acc_order_input[1].setEnabled(enabled)
+        self.formant1_poly_order_input[1].setEnabled(enabled)
+
+    def toggle_formant2_derivative_fields(self):
+        enabled = self.formant2_vel_radio.isChecked() or self.formant2_acc_radio.isChecked()
+        self.formant2_derivative_method_input[1].setEnabled(enabled)
+        self.formant2_width_input[1].setEnabled(enabled)
+        self.formant2_acc_order_input[1].setEnabled(enabled)
+        self.formant2_poly_order_input[1].setEnabled(enabled)
+
+    def toggle_formant3_derivative_fields(self):
+        enabled = self.formant3_vel_radio.isChecked() or self.formant3_acc_radio.isChecked()
+        self.formant3_derivative_method_input[1].setEnabled(enabled)
+        self.formant3_width_input[1].setEnabled(enabled)
+        self.formant3_acc_order_input[1].setEnabled(enabled)
+        self.formant3_poly_order_input[1].setEnabled(enabled)
+
+    def toggle_f0_derivative_fields(self):
+        enabled = self.f0_vel_radio.isChecked() or self.f0_acc_radio.isChecked()
+        self.f0_derivative_method_input[1].setEnabled(enabled)
+        self.f0_width_input[1].setEnabled(enabled)
+        self.f0_acc_order_input[1].setEnabled(enabled)
+        self.f0_poly_order_input[1].setEnabled(enabled)
+
 class ColorSelection(QtWidgets.QWidget):
     color_chosen = QtCore.pyqtSignal(str)
     colors: list[str]
@@ -937,32 +1098,28 @@ class DataSource(ABC):
 class Transformation(ABC):
 
     @abstractmethod
-    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
         pass
-
 
 class Trajectory(Transformation):
 
     @override
-    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
         return x, y
-
 
 class Velocity(Transformation):
 
     @override
-    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        velocity = get_velocity(y, sr=1.0, difference=1, method='gradient')  # Remplacez sr=1.0 par votre taux d'échantillonnage réel
+    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
+        velocity = get_velocity(y, sr=1.0, difference=1, method=method, width=width, accOrder=accOrder, polyOrder=polyOrder)
         return x, velocity
-
 
 class Acceleration(Transformation):
 
     @override
-    def transform(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        acceleration = get_velocity(y, sr=1.0, difference=2, method='gradient')  # Remplacez sr=1.0 par votre taux d'échantillonnage réel
+    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
+        acceleration = get_velocity(y, sr=1.0, difference=2, method=method, width=width, accOrder=accOrder, polyOrder=polyOrder)
         return x, acceleration
-
 
 class Soundwave(DataSource):
 
@@ -1175,7 +1332,13 @@ class CurveGenerator:
         plotter = self.plotters[curve_type_id]
 
         data = source.calculate(audio_path)
-        x, y = operation.transform(*data)
+        # Retrieve the additional parameters for the transform function
+        derivative_method = "gradient"  # Default value or retrieve from the UI if applicable
+        sg_width = 3  # Default value or retrieve from the UI if applicable
+        fin_diff_acc_order = 2  # Default value or retrieve from the UI if applicable
+        sg_poly_order = 2  # Default value or retrieve from the UI if applicable
+
+        x, y = operation.transform(*data, method=derivative_method, width=sg_width, accOrder=fin_diff_acc_order, polyOrder=sg_poly_order)
 
         return plotter.plot(x, y)
     def generate_custom_formant2(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
@@ -1193,7 +1356,8 @@ class CurveGenerator:
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f_times, f2_values)
+        x, y = operation.transform(f_times, f2_values, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+
         
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
@@ -1213,7 +1377,8 @@ class CurveGenerator:
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f_times, f3_values)
+        x, y = operation.transform(f_times, f3_values, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+
         
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
@@ -1232,7 +1397,8 @@ class CurveGenerator:
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f_times, f1_values)
+        x, y = operation.transform(f_times, f1_values, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+
         
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
@@ -1257,7 +1423,8 @@ class CurveGenerator:
             outFiltPolyOrd=params["outFiltPolyOrd"]
         )
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(x, y)
+        x, y = operation.transform(x, y, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+
         plotter = CurvePlotter()
         return plotter.plot(x, y)
     
@@ -1278,8 +1445,7 @@ class CurveGenerator:
         )
 
         operation = self.derivations[derivation_id]
-        time_axis, amplitude = operation.transform(time_axis, amplitude)
-
+        time_axis, amplitude = operation.transform(time_axis, amplitude, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
 
         plotter = CurvePlotter()
         return plotter.plot(time_axis, amplitude)
@@ -1304,7 +1470,8 @@ class CurveGenerator:
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f0_times, f0)
+        x, y = operation.transform(f0_times, f0, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+
         plotter = CurvePlotter()
         return plotter.plot(x, y)
 class MainWindow(QtWidgets.QMainWindow):
