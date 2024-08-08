@@ -28,10 +28,6 @@ from quadruple_axis_plot_item import (
     SoundInformation,
     DisplayInterval,
 )
-
-
-
-
 class UnifiedConfigDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -68,7 +64,26 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.mfcc_name_input = self.create_input_field("Curve Name:", "Custom MFCC")
         self.mfcc_panel_choice = QtWidgets.QComboBox()
         self.mfcc_panel_choice.addItems(["1", "2", "3", "4"])
+        
+        self.mfcc_derivative_group = QtWidgets.QButtonGroup()
+        self.mfcc_traj_radio = QtWidgets.QRadioButton("Traj")
+        self.mfcc_vel_radio = QtWidgets.QRadioButton("Vel")
+        self.mfcc_acc_radio = QtWidgets.QRadioButton("Acc")
+        self.mfcc_traj_radio.setChecked(True)
 
+        self.mfcc_derivative_group.addButton(self.mfcc_traj_radio)
+        self.mfcc_derivative_group.addButton(self.mfcc_vel_radio)
+        self.mfcc_derivative_group.addButton(self.mfcc_acc_radio)
+        self.mfcc_derivative_group.setExclusive(True)
+
+        # Add derivatives section
+        derivative_layout = QtWidgets.QVBoxLayout()
+        derivative_layout.addWidget(self.mfcc_traj_radio)
+        derivative_layout.addWidget(self.mfcc_vel_radio)
+        derivative_layout.addWidget(self.mfcc_acc_radio)
+        self.mfcc_derivative_widget = QtWidgets.QWidget()
+        self.mfcc_derivative_widget.setLayout(derivative_layout)
+        
         # Checkbox for enabling/disabling Amplitude customization
         self.amp_enable_checkbox = QtWidgets.QCheckBox("Enable Amplitude Customization")
         self.amp_enable_checkbox.setChecked(True)
@@ -87,6 +102,24 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.amp_name_input = self.create_input_field("Curve Name:", "Custom Amplitude")
         self.amp_panel_choice = QtWidgets.QComboBox()
         self.amp_panel_choice.addItems(["1", "2", "3", "4"])
+        
+        self.amp_derivative_group = QtWidgets.QButtonGroup()
+        self.amp_traj_radio = QtWidgets.QRadioButton("Traj")
+        self.amp_vel_radio = QtWidgets.QRadioButton("Vel")
+        self.amp_acc_radio = QtWidgets.QRadioButton("Acc")
+        self.amp_traj_radio.setChecked(True)
+
+        self.amp_derivative_group.addButton(self.amp_traj_radio)
+        self.amp_derivative_group.addButton(self.amp_vel_radio)
+        self.amp_derivative_group.addButton(self.amp_acc_radio)
+        self.amp_derivative_group.setExclusive(True)
+
+        derivative_layout = QtWidgets.QVBoxLayout()
+        derivative_layout.addWidget(self.amp_traj_radio)
+        derivative_layout.addWidget(self.amp_vel_radio)
+        derivative_layout.addWidget(self.amp_acc_radio)
+        self.amp_derivative_widget = QtWidgets.QWidget()
+        self.amp_derivative_widget.setLayout(derivative_layout)
 
         # Checkbox for enabling/disabling Formant1 customization
         self.formant1_enable_checkbox = QtWidgets.QCheckBox("Enable Formant1 Customization")
@@ -104,6 +137,24 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant1_panel_choice = QtWidgets.QComboBox()
         self.formant1_panel_choice.addItems(["1", "2", "3", "4"])
 
+        self.formant1_derivative_group = QtWidgets.QButtonGroup()
+        self.formant1_traj_radio = QtWidgets.QRadioButton("Traj")
+        self.formant1_vel_radio = QtWidgets.QRadioButton("Vel")
+        self.formant1_acc_radio = QtWidgets.QRadioButton("Acc")
+        self.formant1_traj_radio.setChecked(True)
+
+        self.formant1_derivative_group.addButton(self.formant1_traj_radio)
+        self.formant1_derivative_group.addButton(self.formant1_vel_radio)
+        self.formant1_derivative_group.addButton(self.formant1_acc_radio)
+        self.formant1_derivative_group.setExclusive(True)
+
+        derivative_layout = QtWidgets.QVBoxLayout()
+        derivative_layout.addWidget(self.formant1_traj_radio)
+        derivative_layout.addWidget(self.formant1_vel_radio)
+        derivative_layout.addWidget(self.formant1_acc_radio)
+        self.formant1_derivative_widget = QtWidgets.QWidget()
+        self.formant1_derivative_widget.setLayout(derivative_layout)
+
         # Checkbox for enabling/disabling Formant2 customization
         self.formant2_enable_checkbox = QtWidgets.QCheckBox("Enable Formant2 Customization")
         self.formant2_enable_checkbox.setChecked(True)
@@ -120,6 +171,24 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant2_panel_choice = QtWidgets.QComboBox()
         self.formant2_panel_choice.addItems(["1", "2", "3", "4"])
 
+        self.formant2_derivative_group = QtWidgets.QButtonGroup()
+        self.formant2_traj_radio = QtWidgets.QRadioButton("Traj")
+        self.formant2_vel_radio = QtWidgets.QRadioButton("Vel")
+        self.formant2_acc_radio = QtWidgets.QRadioButton("Acc")
+        self.formant2_traj_radio.setChecked(True)
+
+        self.formant2_derivative_group.addButton(self.formant2_traj_radio)
+        self.formant2_derivative_group.addButton(self.formant2_vel_radio)
+        self.formant2_derivative_group.addButton(self.formant2_acc_radio)
+        self.formant2_derivative_group.setExclusive(True)
+
+        derivative_layout = QtWidgets.QVBoxLayout()
+        derivative_layout.addWidget(self.formant2_traj_radio)
+        derivative_layout.addWidget(self.formant2_vel_radio)
+        derivative_layout.addWidget(self.formant2_acc_radio)
+        self.formant2_derivative_widget = QtWidgets.QWidget()
+        self.formant2_derivative_widget.setLayout(derivative_layout)
+
         # Checkbox for enabling/disabling Formant3 customization
         self.formant3_enable_checkbox = QtWidgets.QCheckBox("Enable Formant3 Customization")
         self.formant3_enable_checkbox.setChecked(True)
@@ -135,6 +204,25 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant3_name_input = self.create_input_field("Curve Name:", "Custom Formant3")
         self.formant3_panel_choice = QtWidgets.QComboBox()
         self.formant3_panel_choice.addItems(["1", "2", "3", "4"])
+
+        self.formant3_derivative_group = QtWidgets.QButtonGroup()
+        self.formant3_traj_radio = QtWidgets.QRadioButton("Traj")
+        self.formant3_vel_radio = QtWidgets.QRadioButton("Vel")
+        self.formant3_acc_radio = QtWidgets.QRadioButton("Acc")
+        self.formant3_traj_radio.setChecked(True)
+
+        self.formant3_derivative_group.addButton(self.formant3_traj_radio)
+        self.formant3_derivative_group.addButton(self.formant3_vel_radio)
+        self.formant3_derivative_group.addButton(self.formant3_acc_radio)
+        self.formant3_derivative_group.setExclusive(True)
+
+        derivative_layout = QtWidgets.QVBoxLayout()
+        derivative_layout.addWidget(self.formant3_traj_radio)
+        derivative_layout.addWidget(self.formant3_vel_radio)
+        derivative_layout.addWidget(self.formant3_acc_radio)
+        self.formant3_derivative_widget = QtWidgets.QWidget()
+        self.formant3_derivative_widget.setLayout(derivative_layout)
+
         # F0 Configuration
         self.f0_enable_checkbox = QtWidgets.QCheckBox("Enable F0 Customization")
         self.f0_enable_checkbox.setChecked(True)
@@ -154,9 +242,26 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.f0_panel_choice = QtWidgets.QComboBox()
         self.f0_panel_choice.addItems(["1", "2", "3", "4"])
 
+        self.f0_derivative_group = QtWidgets.QButtonGroup()
+        self.f0_traj_radio = QtWidgets.QRadioButton("Traj")
+        self.f0_vel_radio = QtWidgets.QRadioButton("Vel")
+        self.f0_acc_radio = QtWidgets.QRadioButton("Acc")
+        self.f0_traj_radio.setChecked(True)
+
+        self.f0_derivative_group.addButton(self.f0_traj_radio)
+        self.f0_derivative_group.addButton(self.f0_vel_radio)
+        self.f0_derivative_group.addButton(self.f0_acc_radio)
+        self.f0_derivative_group.setExclusive(True)
+
+        derivative_layout = QtWidgets.QVBoxLayout()
+        derivative_layout.addWidget(self.f0_traj_radio)
+        derivative_layout.addWidget(self.f0_vel_radio)
+        derivative_layout.addWidget(self.f0_acc_radio)
+        self.f0_derivative_widget = QtWidgets.QWidget()
+        self.f0_derivative_widget.setLayout(derivative_layout)
+
         self.apply_button = QtWidgets.QPushButton("Apply")
         self.apply_button.clicked.connect(self.accept)
-
         self.add_groupbox_to_layout("MFCC Configuration", [
             self.mfcc_enable_checkbox,
             self.mfcc_sample_rate_input,
@@ -174,8 +279,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.mfcc_out_filt_len_input,
             self.mfcc_out_filt_polyord_input,
             self.mfcc_name_input,
-            (QtWidgets.QLabel("MFCC Panel:"), self.mfcc_panel_choice)
+            (QtWidgets.QLabel("MFCC Panel:"), self.mfcc_panel_choice),
+            self.mfcc_derivative_widget
         ], scroll_layout, 0, 0)
+
         self.add_groupbox_to_layout("Amplitude Configuration", [
             self.amp_enable_checkbox,
             self.amp_method_input,
@@ -188,7 +295,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.amp_outfilt_len_input,
             self.amp_outfilt_polyord_input,
             self.amp_name_input,
-            (QtWidgets.QLabel("Amplitude Panel:"), self.amp_panel_choice)
+            (QtWidgets.QLabel("Amplitude Panel:"), self.amp_panel_choice),
+            self.amp_derivative_widget
         ], scroll_layout, 0, 1)
 
         self.add_groupbox_to_layout("Formant1 Configuration", [
@@ -200,7 +308,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant1_winlen_input,
             self.formant1_pre_emphasis_input,
             self.formant1_name_input,
-            (QtWidgets.QLabel("Formant1 Panel:"), self.formant1_panel_choice)
+            (QtWidgets.QLabel("Formant1 Panel:"), self.formant1_panel_choice),
+            self.formant1_derivative_widget
         ], scroll_layout, 0, 2)
 
         self.add_groupbox_to_layout("Formant2 Configuration", [
@@ -212,7 +321,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant2_winlen_input,
             self.formant2_pre_emphasis_input,
             self.formant2_name_input,
-            (QtWidgets.QLabel("Formant2 Panel:"), self.formant2_panel_choice)
+            (QtWidgets.QLabel("Formant2 Panel:"), self.formant2_panel_choice),
+            self.formant2_derivative_widget
         ], scroll_layout, 1, 0)
 
         self.add_groupbox_to_layout("Formant3 Configuration", [
@@ -224,8 +334,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant3_winlen_input,
             self.formant3_pre_emphasis_input,
             self.formant3_name_input,
-            (QtWidgets.QLabel("Formant3 Panel:"), self.formant3_panel_choice)
+            (QtWidgets.QLabel("Formant3 Panel:"), self.formant3_panel_choice),
+            self.formant3_derivative_widget
         ], scroll_layout, 1, 1)
+
         self.add_groupbox_to_layout("F0 Configuration", [
             self.f0_enable_checkbox,
             self.f0_method_input,
@@ -239,12 +351,15 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.f0_out_filt_len_input,
             self.f0_out_filt_polyord_input,
             self.f0_name_input,
-            (QtWidgets.QLabel("F0 Panel:"), self.f0_panel_choice)
+            (QtWidgets.QLabel("F0 Panel:"), self.f0_panel_choice),
+            self.f0_derivative_widget
         ], scroll_layout, 1, 2)
+
         scroll_layout.addWidget(self.apply_button, 2, 0, 1, 3)
 
         self.layout.addWidget(scroll_area)
         self.setLayout(self.layout)
+
 
     def create_input_field(self, label_text, default_value):
         label = QtWidgets.QLabel(label_text)
@@ -252,6 +367,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         container = QtWidgets.QVBoxLayout()
         container.addWidget(label)
         container.addWidget(input_field)
+        container.setSpacing(1)  # Reduce spacing between label and input field
+        container.setContentsMargins(1, 1, 1, 1)  # Reduce margins inside the container
         widget = QtWidgets.QWidget()
         widget.setLayout(container)
         return widget, input_field
@@ -259,6 +376,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
     def add_groupbox_to_layout(self, title, widgets, layout, row, col):
         group_box = QtWidgets.QGroupBox(title)
         group_box_layout = QtWidgets.QVBoxLayout()
+        group_box_layout.setSpacing(1)  # Reduce spacing between widgets in the group box
+        group_box_layout.setContentsMargins(1, 1, 1, 1)  # Reduce margins inside the group box
         group_box.setLayout(group_box_layout)
 
         for widget in widgets:
@@ -266,6 +385,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 h_layout = QtWidgets.QHBoxLayout()
                 h_layout.addWidget(widget[0])
                 h_layout.addWidget(widget[1])
+                h_layout.setSpacing(1)  # Reduce spacing between label and combo box
                 container = QtWidgets.QWidget()
                 container.setLayout(h_layout)
                 group_box_layout.addWidget(container)
@@ -281,6 +401,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         formant2_enabled = self.formant2_enable_checkbox.isChecked()
         formant3_enabled = self.formant3_enable_checkbox.isChecked()
         f0_enabled = self.f0_enable_checkbox.isChecked()
+
         params = {
             "mfcc": {
                 "enabled": mfcc_enabled,
@@ -299,7 +420,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "outFiltLen": int(self.mfcc_out_filt_len_input[1].text()),
                 "outFiltPolyOrd": int(self.mfcc_out_filt_polyord_input[1].text()),
                 "name": self.mfcc_name_input[1].text(),
-                "panel": int(self.mfcc_panel_choice.currentIndex())
+                "panel": int(self.mfcc_panel_choice.currentIndex()),
+                "derivation_type": 0 if self.mfcc_traj_radio.isChecked() else 1 if self.mfcc_vel_radio.isChecked() else 2
             },
             "amplitude": {
                 "enabled": amp_enabled,
@@ -313,7 +435,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "outFiltLen": int(self.amp_outfilt_len_input[1].text()),
                 "outFiltPolyOrd": int(self.amp_outfilt_polyord_input[1].text()),
                 "name": self.amp_name_input[1].text(),
-                "panel": int(self.amp_panel_choice.currentIndex())
+                "panel": int(self.amp_panel_choice.currentIndex()),
+                "derivation_type": 0 if self.amp_traj_radio.isChecked() else 1 if self.amp_vel_radio.isChecked() else 2
             },
             "formant1": {
                 "enabled": formant1_enabled,
@@ -324,7 +447,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "window_length": float(self.formant1_winlen_input[1].text()),
                 "pre_emphasis_from": float(self.formant1_pre_emphasis_input[1].text()),
                 "name": self.formant1_name_input[1].text(),
-                "panel": int(self.formant1_panel_choice.currentIndex())
+                "panel": int(self.formant1_panel_choice.currentIndex()),
+                "derivation_type": 0 if self.formant1_traj_radio.isChecked() else 1 if self.formant1_vel_radio.isChecked() else 2
             },
             "formant2": {
                 "enabled": formant2_enabled,
@@ -335,7 +459,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "window_length": float(self.formant2_winlen_input[1].text()),
                 "pre_emphasis_from": float(self.formant2_pre_emphasis_input[1].text()),
                 "name": self.formant2_name_input[1].text(),
-                "panel": int(self.formant2_panel_choice.currentIndex())
+                "panel": int(self.formant2_panel_choice.currentIndex()),
+                "derivation_type": 0 if self.formant2_traj_radio.isChecked() else 1 if self.formant2_vel_radio.isChecked() else 2
             },
             "formant3": {
                 "enabled": formant3_enabled,
@@ -346,9 +471,9 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "window_length": float(self.formant3_winlen_input[1].text()),
                 "pre_emphasis_from": float(self.formant3_pre_emphasis_input[1].text()),
                 "name": self.formant3_name_input[1].text(),
-                "panel": int(self.formant3_panel_choice.currentIndex())
-            }
-                ,
+                "panel": int(self.formant3_panel_choice.currentIndex()),
+                "derivation_type": 0 if self.formant3_traj_radio.isChecked() else 1 if self.formant3_vel_radio.isChecked() else 2
+            },
             "f0": {
                 "enabled": f0_enabled,
                 "method": self.f0_method_input[1].text(),
@@ -362,10 +487,10 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "outFiltLen": int(self.f0_out_filt_len_input[1].text()),
                 "outFiltPolyOrd": int(self.f0_out_filt_polyord_input[1].text()),
                 "name": self.f0_name_input[1].text(),
-                "panel": int(self.f0_panel_choice.currentIndex())
+                "panel": int(self.f0_panel_choice.currentIndex()),
+                "derivation_type": 0 if self.f0_traj_radio.isChecked() else 1 if self.f0_vel_radio.isChecked() else 2
             }
         }
-        print("Parameters from dialog:", params)  # Debugging output
         return params
 
     def toggle_mfcc_fields(self, state):
@@ -389,6 +514,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.mfcc_panel_choice
         ]:
             widget.setEnabled(enabled)
+        self.mfcc_derivative_widget.setEnabled(enabled)
+
     def toggle_amp_fields(self, state):
         enabled = state == QtCore.Qt.Checked
         for widget in [
@@ -405,6 +532,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.amp_panel_choice
         ]:
             widget.setEnabled(enabled)
+        self.amp_derivative_widget.setEnabled(enabled)
 
     def toggle_formant1_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -419,6 +547,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant1_panel_choice
         ]:
             widget.setEnabled(enabled)
+        self.formant1_derivative_widget.setEnabled(enabled)
 
     def toggle_formant2_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -433,6 +562,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant2_panel_choice
         ]:
             widget.setEnabled(enabled)
+        self.formant2_derivative_widget.setEnabled(enabled)
 
     def toggle_formant3_fields(self, state):
         enabled = state == QtCore.Qt.Checked
@@ -447,6 +577,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.formant3_panel_choice
         ]:
             widget.setEnabled(enabled)
+        self.formant3_derivative_widget.setEnabled(enabled)
+
     def toggle_f0_fields(self, state):
         enabled = state == QtCore.Qt.Checked
         for widget in [
@@ -464,6 +596,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.f0_panel_choice
         ]:
             widget.setEnabled(enabled)
+        self.f0_derivative_widget.setEnabled(enabled)
 class ColorSelection(QtWidgets.QWidget):
     color_chosen = QtCore.pyqtSignal(str)
     colors: list[str]
@@ -587,8 +720,9 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         return self.panel_choice.currentIndex()
 
     @property
-    def derivation_type(self) -> None:
+    def derivation_type(self) -> int:
         return self._derivation_type.currentIndex()
+
 
 
 class Dashboard(QtWidgets.QTreeWidget):
@@ -1427,18 +1561,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
         curve_name = item._curve_type.currentText()
-        
+        derivation_id = item._derivation_type.currentIndex()  # Get the selected derivation type from the dashboard
+
         # Check if the curve_name is in custom_curves
         if curve_name in self.custom_curves:
             custom_curve_config = self.custom_curves[curve_name]
             generator_function = custom_curve_config['generator_function']
             params = custom_curve_config['params']
-            new_curve = generator_function(self.audio_path, params, curve_derivation_id)
+            new_curve = generator_function(self.audio_path, params, derivation_id)
         else:
             # Default curve generation
             if curve_type_id >= 0 and curve_type_id < len(self.curve_generator.datasources):
                 new_curve = self.curve_generator.generate(
-                    self.audio_path, curve_type_id, curve_derivation_id
+                    self.audio_path, curve_type_id, derivation_id
                 )
             else:
                 return
@@ -1455,7 +1590,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if new_curve is not None:
             panel.panel.add_curve(new_curve)
             self.curves[row_id][0] = new_curve
-
 
     def handle_new_row(self, row_count: int) -> None:
         new_row_id = row_count - 1
@@ -1487,9 +1621,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.add_custom_curve(params["formant3"], params["formant3"]["panel"], "Custom Formant3", self.curve_generator.generate_custom_formant3)
             if params["f0"]["enabled"]:
                 self.add_custom_curve(params["f0"], params["f0"]["panel"], "Custom F0", self.curve_generator.generate_custom_f0)
-
     def add_custom_curve(self, params, panel_id, default_curve_name, generator_function):
-        derivation_id = 0  # Default to trajectory; modify as needed
+        # Determine derivation type from configuration
+        derivation_id = params["derivation_type"]
+
         curve_values = generator_function(self.audio_path, params, derivation_id)
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
@@ -1498,7 +1633,6 @@ class MainWindow(QtWidgets.QMainWindow):
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
 
-        # Use the provided curve name if it exists, otherwise default to the parameter name
         curve_name = params.get("name", default_curve_name)
         item._curve_type.addItem(curve_name)
         index = item._curve_type.findText(curve_name)
@@ -1506,6 +1640,9 @@ class MainWindow(QtWidgets.QMainWindow):
             item._curve_type.setCurrentIndex(index)
 
         item.panel_choice.setCurrentIndex(panel_id)
+
+        # Set the derivation type in the dashboard item
+        item._derivation_type.setCurrentIndex(derivation_id)
 
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_curves[curve_name] = {
