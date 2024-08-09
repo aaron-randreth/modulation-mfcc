@@ -17,7 +17,7 @@ import time
 from scipy.io import wavfile
 from config_dialog import UnifiedConfigDialog
 from mfcc import load_channel, get_MFCCS_change
-from calc import calc_formants, calculate_amplitude_envelope,get_f0,get_velocity
+from calc import calc_formants, calculate_amplitude_envelope,get_f0,get_velocity,read_AG50x
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
@@ -28,6 +28,48 @@ from quadruple_axis_plot_item import (
     SoundInformation,
     DisplayInterval,
 )
+class POSChannelSelectionDialog(QtWidgets.QDialog):
+    def __init__(self, pos_channels, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select and Rename POS Channels")
+        self.pos_channels = pos_channels
+        self.selected_channels = {}
+        
+        self.layout = QtWidgets.QVBoxLayout(self)
+        channel_layout = QtWidgets.QGridLayout()
+
+        self.checkboxes = {}
+        self.rename_edits = {}
+
+        for i, channel in enumerate(self.pos_channels):
+            checkbox = QtWidgets.QCheckBox(f"Channel {channel}")
+            rename_edit = QtWidgets.QLineEdit(self)
+            rename_edit.setPlaceholderText("Enter new name (optional)")
+            
+            self.checkboxes[channel] = checkbox
+            self.rename_edits[channel] = rename_edit
+
+            channel_layout.addWidget(checkbox, i, 0)
+            channel_layout.addWidget(rename_edit, i, 1)
+
+        self.layout.addLayout(channel_layout)
+
+        self.button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
+            QtCore.Qt.Horizontal,
+            self,
+        )
+
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        self.layout.addWidget(self.button_box)
+
+    def get_selected_channels(self):
+        for channel, checkbox in self.checkboxes.items():
+            if checkbox.isChecked():
+                custom_name = self.rename_edits[channel].text() if self.rename_edits[channel].text() else f"Channel {channel}"
+                self.selected_channels[channel] = custom_name
+        return self.selected_channels
 
 class ColorSelection(QtWidgets.QWidget):
     color_chosen = QtCore.pyqtSignal(str)
@@ -171,7 +213,7 @@ class Dashboard(QtWidgets.QTreeWidget):
 
     def __init__(self,custom_curves) -> None:
         super().__init__()
-        self.custom_curves = custom_curves  # Store custom curves
+        self.custom_curves = custom_curves 
         self.row_count = 0
         self.headers = ["Acoustique", "EMA", "Couleur", "Panel", "Show", "Dérivée"]
 
@@ -180,10 +222,8 @@ class Dashboard(QtWidgets.QTreeWidget):
         self.resize_column()
 
     def update_curve_choices(self, item):
-        # Add default curve choices
         item._curve_type.addItems(["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"])
         
-        # Add custom curve choices
         for custom_curve_name in self.custom_curves:
             item._curve_type.addItem(custom_curve_name)
         # for _ in range(4):
@@ -231,7 +271,7 @@ class DashboardWidget(QtWidgets.QWidget):
     def __init__(self, custom_curves) -> None:
         super().__init__()
 
-        self.dashboard = Dashboard(custom_curves)  # Pass custom_curves here
+        self.dashboard = Dashboard(custom_curves) 
 
         add_row_button = StyledButton("+", "lightgreen")
         add_row_button.clicked.connect(self._row_added)
@@ -408,26 +448,24 @@ class Mfcc(DataSource):
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         data = load_channel(audio_path)
         print(audio_path)
-        # Paramètres pour la fonction get_MFCCS_change
-        sig_sr = 10000  # Fréquence d'échantillonnage pour l'analyse
-        channel_n = 0  # Numéro du canal pour les fichiers audio multicanaux
-        t_step = 0.005  # Pas de temps pour l'analyse en secondes
-        win_len = 0.025  # Longueur de la fenêtre d'analyse en secondes
-        n_mfcc = 13  # Nombre de MFCC à calculer
-        n_fft = 512  # Nombre de points pour la FFT
-        min_freq = 100  # Fréquence spectrale minimale considérée
-        max_freq = 10000  # Fréquence spectrale maximale considérée
-        remove_first = 1  # Si 1, le premier coefficient cepstral est supprimé
-        filt_cutoff = 12  # Fréquence de coupure du filtre passe-bande
-        filt_ord = 6  # Ordre du filtre passe-bande
-        diff_method = 'grad'  # Méthode pour calculer la vitesse ('grad' ou 'sg')
-        out_filter = 'iir'  # Type de filtre de sortie
-        out_filt_type = 'low'  # Type de filtre de sortie ('low', 'band' ou 'high')
-        out_filt_cutoff = [12]  # Fréquence(s) de coupure du filtre de sortie
-        out_filt_len = 6  # Longueur du filtre de sortie
-        out_filt_poly_ord = 3  # Ordre du polynôme du filtre Savitsky-Golay
+        sig_sr = 10000  
+        channel_n = 0
+        t_step = 0.005  
+        win_len = 0.025
+        n_mfcc = 13
+        n_fft = 512 
+        min_freq = 100  
+        max_freq = 10000 
+        remove_first = 1 
+        filt_cutoff = 12 
+        filt_ord = 6 
+        diff_method = 'grad' 
+        out_filter = 'iir'
+        out_filt_type = 'low'
+        out_filt_cutoff = [12] 
+        out_filt_len = 6  
+        out_filt_poly_ord = 3 
 
-        # Appel de la fonction get_MFCCS_change
         y, x = get_MFCCS_change(
             audio_path, 
             sig_sr, 
@@ -485,22 +523,20 @@ class F0(DataSource):
 
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
-        # Chargez le fichier audio
         sig_sr, audio_data = wavfile.read(audio_path)
         if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0]  # Utiliser le premier canal si stéréo
+            audio_data = audio_data[:, 0]  
 
-        # Paramètres pour la fonction get_f0
-        method = 'praatac'  # Méthode de calcul
-        hop_size = 0.01  # Taille de la fenêtre d'analyse en secondes
-        min_pitch = 75  # Hauteur minimale
-        max_pitch = 600  # Hauteur maximale
-        interp_unvoiced = 'linear'  # Méthode d'interpolation pour les segments non voisés
-        out_filter = 'iir'  # Type de filtre de sortie
-        out_filt_type = 'low'  # Type de filtre de sortie ('low', 'band' ou 'high')
-        out_filt_cutoff = [12]  # Fréquence(s) de coupure du filtre de sortie
-        out_filt_len = 6  # Longueur du filtre de sortie
-        out_filt_poly_ord = 3  # Ordre du polynôme du filtre Savitsky-Golay
+        method = 'praatac'
+        hop_size = 0.01  
+        min_pitch = 75  
+        max_pitch = 600 
+        interp_unvoiced = 'linear' 
+        out_filter = 'iir' 
+        out_filt_type = 'low' 
+        out_filt_cutoff = [12]  
+        out_filt_len = 6 
+        out_filt_poly_ord = 3 
 
         # Appel de la fonction get_f0
         f0, f0_times = get_f0(
@@ -603,11 +639,10 @@ class CurveGenerator:
         plotter = self.plotters[curve_type_id]
 
         data = source.calculate(audio_path)
-        # Retrieve the additional parameters for the transform function
-        derivative_method = "gradient"  # Default value or retrieve from the UI if applicable
-        sg_width = 3  # Default value or retrieve from the UI if applicable
-        fin_diff_acc_order = 2  # Default value or retrieve from the UI if applicable
-        sg_poly_order = 2  # Default value or retrieve from the UI if applicable
+        derivative_method = "gradient" 
+        sg_width = 3  
+        fin_diff_acc_order = 2  
+        sg_poly_order = 2 
 
         x, y = operation.transform(*data, method=derivative_method, width=sg_width, accOrder=fin_diff_acc_order, polyOrder=sg_poly_order)
 
@@ -723,7 +758,7 @@ class CurveGenerator:
     def generate_custom_f0(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
         sig_sr, audio_data = wavfile.read(audio_path)
         if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0]  # Utiliser le premier canal si stéréo
+            audio_data = audio_data[:, 0]  
 
         f0, f0_times = get_f0(
             audio_data,
@@ -759,7 +794,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.init_main_layout()
-        self.custom_curves = {}  # Dictionary to store custom curve configurations
+        self.custom_curves = {}
         self.audio_path = None
         self.audio_widget = SoundInformation()
 
@@ -768,7 +803,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
         self.curve_generator = CurveGenerator()
-        self.dashboard_widget = DashboardWidget(self.custom_curves)  # Pass custom_curves
+        self.dashboard_widget = DashboardWidget(self.custom_curves)  
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -779,7 +814,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.tier_selection = TierSelection()
         self.config_mfcc_button = StyledButton("Configure")
-        self.custom_curves = {}  # Dictionary to store custom curve configurations
+        self.custom_curves = {} 
         self.tier_selection.tier_checked.connect(
             lambda tier_name: self.annotation_widget.display(
                 self.annotation_data.get_tier_by_name(tier_name)
@@ -826,18 +861,16 @@ class MainWindow(QtWidgets.QMainWindow):
             self.panels.append(panel_widget)
 
 
-        # Add recording state
         self.recording = False
         self.frames = []
         self.recorded_audio = []
         self.stream = None
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start(100)  # Update plot every 100 ms
-        # Add playback state
+        self.timer.start(100) 
         self.playing = False
         self.audio_cursor = pg.LinearRegionItem()
-        self.audio_cursor.setBrush(pg.mkBrush(0, 255, 0, 50))  # Green with some transparency
+        self.audio_cursor.setBrush(pg.mkBrush(0, 255, 0, 50)) 
         self.audio_widget.sound_plot.addItem(self.audio_cursor)
         self.audio_cursor.hide()
     def init_main_layout(self) -> None:
@@ -856,6 +889,72 @@ class MainWindow(QtWidgets.QMainWindow):
 
         main_layout.addWidget(curve_column_widget, 3)
         main_layout.addWidget(control_column_widget, 2)
+    def create_load_buttons(self) -> QtWidgets.QGroupBox:
+        load_group_box = QtWidgets.QGroupBox("Load Audio, TextGrid and POS")
+        load_layout = QtWidgets.QVBoxLayout()
+
+        load_audio_button = StyledButton("Load Audio")
+        load_textgrid_button = StyledButton("Load TextGrid")
+        load_pos_button = StyledButton("Load POS File")
+        self.record_button = StyledButton("Record Audio", "lightgreen")
+
+        load_audio_button.clicked.connect(self.load_audio)
+        load_textgrid_button.clicked.connect(self.load_annotations)
+        load_pos_button.clicked.connect(self.load_pos_file)
+        self.record_button.clicked.connect(self.toggle_recording)
+
+        load_layout.addWidget(load_audio_button)
+        load_layout.addWidget(load_textgrid_button)
+        load_layout.addWidget(load_pos_button)
+        load_layout.addWidget(self.record_button)
+
+        load_group_box.setLayout(load_layout)
+        return load_group_box
+    def load_pos_file(self) -> None:
+        pos_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Open POS File", "", "POS Files (*.pos)"
+        )
+
+        if not pos_path:
+            return
+
+        self.pos_data = read_AG50x(pos_path)
+        self.pos_channels = self.pos_data.channels.values 
+
+        dialog = POSChannelSelectionDialog(self.pos_channels, self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            selected_channels = dialog.get_selected_channels()
+
+            self.add_pos_channels_to_dashboard(selected_channels)
+
+    def add_pos_channels_to_dashboard(self, selected_channels: dict) -> None:
+        for original_channel_id, custom_name in selected_channels.items():
+            channel_id = int(original_channel_id) 
+            channel_name = custom_name  
+
+            self.custom_curves[channel_name] = {
+                'generator_function': self.generate_pos_curve,
+                'params': {
+                    'channel_id': channel_id
+                }
+            }
+
+            for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
+                item = self.dashboard_widget.dashboard.topLevelItem(i)
+                item._curve_type.addItem(channel_name)
+
+
+    def generate_pos_curve(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+        channel_id = params['channel_id']
+        pos_data = self.pos_data.ema.sel(channels=channel_id)
+
+        time_axis = pos_data.time.values
+        y_values = pos_data.sel(dimensions='z').values 
+        operation = self.curve_generator.derivations[derivation_id]
+        x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
+
+        plotter = CurvePlotter()
+        return plotter.plot(x, y)
 
     def add_curve_widget(self, widget: QtWidgets.QWidget) -> None:
         viewbox = None
@@ -873,23 +972,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_control_widget(self, widget: QtWidgets.QWidget) -> None:
         self.control_column_layout.addWidget(widget)
 
-    def create_load_buttons(self) -> QtWidgets.QGroupBox:
-        load_group_box = QtWidgets.QGroupBox("Load Audio and TextGrid")
-        load_layout = QtWidgets.QVBoxLayout()
-
-        load_audio_button = StyledButton("Load Audio")
-        load_textgrid_button = StyledButton("Load TextGrid")
-        self.record_button = StyledButton("Record Audio", "lightgreen")
-
-        load_audio_button.clicked.connect(self.load_audio)
-        load_textgrid_button.clicked.connect(self.load_annotations)
-        self.record_button.clicked.connect(self.toggle_recording)
-        load_layout.addWidget(load_audio_button)
-        load_layout.addWidget(load_textgrid_button)
-        load_layout.addWidget(self.record_button)
-
-        load_group_box.setLayout(load_layout)
-        return load_group_box
 
 
     def create_audio_control_buttons(self) -> QtWidgets.QGroupBox:
@@ -999,16 +1081,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
         curve_name = item._curve_type.currentText()
-        derivation_id = item._derivation_type.currentIndex()  # Get the selected derivation type from the dashboard
+        derivation_id = item._derivation_type.currentIndex() 
 
-        # Check if the curve_name is in custom_curves
         if curve_name in self.custom_curves:
             custom_curve_config = self.custom_curves[curve_name]
             generator_function = custom_curve_config['generator_function']
             params = custom_curve_config['params']
             new_curve = generator_function(self.audio_path, params, derivation_id)
         else:
-            # Default curve generation
             if curve_type_id >= 0 and curve_type_id < len(self.curve_generator.datasources):
                 new_curve = self.curve_generator.generate(
                     self.audio_path, curve_type_id, derivation_id
@@ -1060,7 +1140,6 @@ class MainWindow(QtWidgets.QMainWindow):
             if params["f0"]["enabled"]:
                 self.add_custom_curve(params["f0"], params["f0"]["panel"], "Custom F0", self.curve_generator.generate_custom_f0)
     def add_custom_curve(self, params, panel_id, default_curve_name, generator_function):
-        # Determine derivation type from configuration
         derivation_id = params["derivation_type"]
 
         curve_values = generator_function(self.audio_path, params, derivation_id)
@@ -1079,7 +1158,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         item.panel_choice.setCurrentIndex(panel_id)
 
-        # Set the derivation type in the dashboard item
         item._derivation_type.setCurrentIndex(derivation_id)
 
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
@@ -1089,7 +1167,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'generator_function': generator_function
         }
     def add_custom_f0_curve(self, params, panel_id):
-        derivation_id = 0  # Par défaut à la trajectoire ; modifiez si nécessaire
+        derivation_id = 0  
         curve_values = self.curve_generator.generate_custom_f0(self.audio_path, params, derivation_id)
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
@@ -1184,7 +1262,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.custom_mfcc_params[row_id] = params
 
     def add_custom_amplitude_curve(self, params, panel_id):
-        derivation_id = 0  # Par défaut à la trajectoire ; modifiez si nécessaire
+        derivation_id = 0 
         curve_values = self.curve_generator.generate_custom_amplitude(self.audio_path, params, derivation_id)
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
@@ -1239,7 +1317,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def audio_callback(self, indata, frames, time, status):
         if self.recording:
             self.frames.append(indata.copy())
-            # Ajoutez cette ligne pour mettre à jour le signal en temps réel
             self.update_plot()
 
     def update_plot(self):
