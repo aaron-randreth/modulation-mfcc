@@ -28,6 +28,9 @@ from quadruple_axis_plot_item import (
     SoundInformation,
     DisplayInterval,
 )
+import csv
+
+from scipy.signal import find_peaks
 class POSChannelSelectionDialog(QtWidgets.QDialog):
     def __init__(self, pos_channels, parent=None):
         super().__init__(parent)
@@ -271,7 +274,7 @@ class DashboardWidget(QtWidgets.QWidget):
     def __init__(self, custom_curves) -> None:
         super().__init__()
 
-        self.dashboard = Dashboard(custom_curves) 
+        self.dashboard = Dashboard(custom_curves)  
 
         add_row_button = StyledButton("+", "lightgreen")
         add_row_button.clicked.connect(self._row_added)
@@ -448,23 +451,23 @@ class Mfcc(DataSource):
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         data = load_channel(audio_path)
         print(audio_path)
-        sig_sr = 10000  
-        channel_n = 0
-        t_step = 0.005  
-        win_len = 0.025
-        n_mfcc = 13
-        n_fft = 512 
-        min_freq = 100  
-        max_freq = 10000 
+        sig_sr = 10000 
+        channel_n = 0 
+        t_step = 0.005 
+        win_len = 0.025  
+        n_mfcc = 13  
+        n_fft = 512  
+        min_freq = 100 
+        max_freq = 10000  
         remove_first = 1 
-        filt_cutoff = 12 
+        filt_cutoff = 12  
         filt_ord = 6 
-        diff_method = 'grad' 
-        out_filter = 'iir'
-        out_filt_type = 'low'
-        out_filt_cutoff = [12] 
-        out_filt_len = 6  
-        out_filt_poly_ord = 3 
+        diff_method = 'grad'  
+        out_filter = 'iir'  
+        out_filt_type = 'low' 
+        out_filt_cutoff = [12]
+        out_filt_len = 6 
+        out_filt_poly_ord = 3  
 
         y, x = get_MFCCS_change(
             audio_path, 
@@ -525,20 +528,19 @@ class F0(DataSource):
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         sig_sr, audio_data = wavfile.read(audio_path)
         if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0]  
+            audio_data = audio_data[:, 0] 
 
-        method = 'praatac'
-        hop_size = 0.01  
-        min_pitch = 75  
-        max_pitch = 600 
-        interp_unvoiced = 'linear' 
+        method = 'praatac'  
+        hop_size = 0.01 
+        min_pitch = 75 
+        max_pitch = 600  
+        interp_unvoiced = 'linear'  
         out_filter = 'iir' 
         out_filt_type = 'low' 
-        out_filt_cutoff = [12]  
+        out_filt_cutoff = [12] 
         out_filt_len = 6 
         out_filt_poly_ord = 3 
 
-        # Appel de la fonction get_f0
         f0, f0_times = get_f0(
             audio_data,
             sig_sr,
@@ -639,7 +641,7 @@ class CurveGenerator:
         plotter = self.plotters[curve_type_id]
 
         data = source.calculate(audio_path)
-        derivative_method = "gradient" 
+        derivative_method = "gradient"  
         sg_width = 3  
         fin_diff_acc_order = 2  
         sg_poly_order = 2 
@@ -758,7 +760,7 @@ class CurveGenerator:
     def generate_custom_f0(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
         sig_sr, audio_data = wavfile.read(audio_path)
         if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0]  
+            audio_data = audio_data[:, 0] 
 
         f0, f0_times = get_f0(
             audio_data,
@@ -794,7 +796,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.init_main_layout()
-        self.custom_curves = {}
+        self.custom_curves = {} 
         self.audio_path = None
         self.audio_widget = SoundInformation()
 
@@ -803,7 +805,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
         self.curve_generator = CurveGenerator()
-        self.dashboard_widget = DashboardWidget(self.custom_curves)  
+        self.dashboard_widget = DashboardWidget(self.custom_curves) 
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -860,7 +862,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_curve_widget(panel_widget)
             self.panels.append(panel_widget)
 
-
+        self.add_control_widget(self.create_analysis_controls())
         self.recording = False
         self.frames = []
         self.recorded_audio = []
@@ -919,7 +921,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.pos_data = read_AG50x(pos_path)
-        self.pos_channels = self.pos_data.channels.values 
+        self.pos_channels = self.pos_data.channels.values  
 
         dialog = POSChannelSelectionDialog(self.pos_channels, self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
@@ -930,7 +932,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_pos_channels_to_dashboard(self, selected_channels: dict) -> None:
         for original_channel_id, custom_name in selected_channels.items():
             channel_id = int(original_channel_id) 
-            channel_name = custom_name  
+            channel_name = custom_name 
 
             self.custom_curves[channel_name] = {
                 'generator_function': self.generate_pos_curve,
@@ -938,7 +940,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     'channel_id': channel_id
                 }
             }
-
             for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
                 item = self.dashboard_widget.dashboard.topLevelItem(i)
                 item._curve_type.addItem(channel_name)
@@ -950,6 +951,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         time_axis = pos_data.time.values
         y_values = pos_data.sel(dimensions='z').values 
+
         operation = self.curve_generator.derivations[derivation_id]
         x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
 
@@ -987,6 +989,211 @@ class MainWindow(QtWidgets.QMainWindow):
 
         audio_control_group_box.setLayout(audio_control_layout)
         return audio_control_group_box
+    def create_analysis_controls(self) -> QtWidgets.QWidget:
+        analysis_controls_widget = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout()
+
+        self.panel_selector = QtWidgets.QComboBox()
+        self.panel_selector.addItems([f"Panel {i + 1}" for i in range(len(self.panels))])
+
+        self.analyze_max_button = QtWidgets.QPushButton("Analyze Max Peaks")
+        self.analyze_min_button = QtWidgets.QPushButton("Analyze Min Peaks")
+        self.export_csv_button = QtWidgets.QPushButton("Export CSV")
+        self.export_csv_button.clicked.connect(self.export_to_csv)
+        self.analyze_max_button.clicked.connect(self.analyze_max_peaks)
+        self.analyze_min_button.clicked.connect(self.analyze_min_peaks)
+
+        layout.addWidget(QtWidgets.QLabel("Select Panel:"))
+        layout.addWidget(self.panel_selector)
+        layout.addWidget(self.analyze_max_button)
+        layout.addWidget(self.analyze_min_button)
+        layout.addWidget(self.export_csv_button) 
+        analysis_controls_widget.setLayout(layout)
+        return analysis_controls_widget
+
+
+    def export_to_csv(self):
+        panel_id = self.panel_selector.currentIndex()
+        if panel_id < 0:
+            return
+
+        panel = self.panels[panel_id].panel
+
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Select Curves and Data to Export")
+        layout = QtWidgets.QVBoxLayout()
+
+        curve_options = {}
+
+        for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
+            item = self.dashboard_widget.dashboard.topLevelItem(i)
+            curve_name = item._curve_type.currentText()
+            axis_id = i
+
+            curve_layout = QtWidgets.QHBoxLayout()
+            curve_label = QtWidgets.QLabel(f"Curve {axis_id + 1}: {curve_name}")  
+            curve_options[axis_id] = {
+                'x': QtWidgets.QCheckBox("X"),
+                'y': QtWidgets.QCheckBox("Y"),
+                'min': QtWidgets.QCheckBox("Min Peaks"),
+                'max': QtWidgets.QCheckBox("Max Peaks")
+            }
+
+            curve_layout.addWidget(curve_label)
+            for option, checkbox in curve_options[axis_id].items():
+                curve_layout.addWidget(checkbox)
+
+            layout.addLayout(curve_layout)
+
+        button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        dialog.setLayout(layout)
+
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            selected_data = {axis_id: opts for axis_id, opts in curve_options.items() if any(cb.isChecked() for cb in opts.values())}
+
+            if selected_data:
+                csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+                if csv_path:
+                    self.save_curves_to_csv(panel, selected_data, csv_path)
+
+    def save_curves_to_csv(self, panel, selected_data, csv_path):
+        region = self.audio_widget.selection_region.getRegion()
+        region_start, region_end = region
+
+        all_times = set()
+        curve_data = {}
+
+        for axis_id, options in selected_data.items():
+            axis = panel.rotation[axis_id]
+            if isinstance(axis.curve, pg.PlotDataItem):
+                x_data = axis.curve.xData
+                y_data = axis.curve.yData
+            elif isinstance(axis.curve, pg.ScatterPlotItem):
+                x_data = np.array([p.pos().x() for p in axis.curve.points()])
+                y_data = np.array([p.pos().y() for p in curve.points()])
+            else:
+                continue
+
+            curve_data[axis_id] = {'x': x_data, 'y': y_data, 'min': [], 'max': []}
+
+            if options['min'].isChecked():
+                curve_data[axis_id]['min'] = [(x, y) for x, y in axis.min_peaks if region_start <= x <= region_end]
+            if options['max'].isChecked():
+                curve_data[axis_id]['max'] = [(x, y) for x, y in axis.max_peaks if region_start <= x <= region_end]
+
+            if options['x'].isChecked() or options['y'].isChecked():
+                all_times.update(x_data)
+
+        all_times = sorted(all_times)
+
+        with open(csv_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            
+            headers = ["Time"]
+            for axis_id, options in selected_data.items():
+                if options['x'].isChecked():
+                    headers.append(f"Curve {axis_id} X")
+                if options['y'].isChecked():
+                    headers.append(f"Curve {axis_id} Y")
+                if options['min'].isChecked():
+                    headers.append(f"Curve {axis_id} Min Peaks X")
+                    headers.append(f"Curve {axis_id} Min Peaks Y")
+                if options['max'].isChecked():
+                    headers.append(f"Curve {axis_id} Max Peaks X")
+                    headers.append(f"Curve {axis_id} Max Peaks Y")
+            writer.writerow(headers)
+            for t in all_times:
+                row = [t]
+                for axis_id, options in selected_data.items():
+                    data = curve_data[axis_id]
+                    if options['x'].isChecked():
+                        row.append(t if t in data['x'] else np.nan)
+                    if options['y'].isChecked():
+                        y_value = np.interp(t, data['x'], data['y']) if t in data['x'] else np.nan
+                        row.append(y_value)
+                    if options['min'].isChecked():
+                        min_peak = next((p for p in data['min'] if p[0] == t), (np.nan, np.nan))
+                        row.extend(min_peak)
+                    if options['max'].isChecked():
+                        max_peak = next((p for p in data['max'] if p[0] == t), (np.nan, np.nan))
+                        row.extend(max_peak)
+                writer.writerow(row)
+
+        QtWidgets.QMessageBox.information(self, "Export Successful", f"Data has been successfully exported to {csv_path}")
+
+    def analyze_max_peaks(self) -> None:
+        panel_id = self.panel_selector.currentIndex()
+        if panel_id < 0:
+            return
+
+        panel = self.panels[panel_id].panel
+
+        region = self.audio_widget.selection_region.getRegion()
+        region_start, region_end = region
+
+        for axis_id, axis in panel.rotation.items():
+            curve = axis.curve
+            if isinstance(curve, pg.PlotDataItem):
+                x_data = curve.xData
+                y_data = curve.yData
+            elif isinstance(curve, pg.ScatterPlotItem):
+                x_data = np.array([p.pos().x() for p in curve.points()])
+                y_data = np.array([p.pos().y() for p in curve.points()])
+            else:
+                continue
+            region_mask = (x_data >= region_start) & (x_data <= region_end)
+            x_data_region = x_data[region_mask]
+            y_data_region = y_data[region_mask]
+
+            peaks, _ = find_peaks(y_data_region)
+
+            peak_x = x_data_region[peaks]
+            peak_y = y_data_region[peaks]
+            peaks_plot = pg.ScatterPlotItem(peak_x, peak_y, pen=pg.mkPen('r'), brush=pg.mkBrush(255, 0, 0, 150))
+            panel.add_item(axis_id, peaks_plot)
+            axis.max_peaks = list(zip(peak_x, peak_y))  
+
+            peak_info = "\n".join([f"Peak {i + 1}: X = {px}, Y = {py}" for i, (px, py) in enumerate(zip(peak_x, peak_y))])
+            QtWidgets.QMessageBox.information(self, "Peak Analysis", f"Peaks in Panel {panel_id + 1} (Selected Region):\n\n{peak_info}")
+
+    def analyze_min_peaks(self) -> None:
+        panel_id = self.panel_selector.currentIndex()
+        if panel_id < 0:
+            return
+
+        panel = self.panels[panel_id].panel
+
+        region = self.audio_widget.selection_region.getRegion()
+        region_start, region_end = region
+
+        for axis_id, axis in panel.rotation.items():
+            curve = axis.curve
+            if isinstance(curve, pg.PlotDataItem):
+                x_data = curve.xData
+                y_data = curve.yData
+            elif isinstance(curve, pg.ScatterPlotItem):
+                x_data = np.array([p.pos().x() for p in curve.points()])
+                y_data = np.array([p.pos().y() for p in curve.points()])
+            else:
+                continue
+
+            region_mask = (x_data >= region_start) & (x_data <= region_end)
+            x_data_region = x_data[region_mask]
+            y_data_region = y_data[region_mask]
+            peaks, _ = find_peaks(-y_data_region)
+
+            peak_x = x_data_region[peaks]
+            peak_y = y_data_region[peaks]
+            minima_plot = pg.ScatterPlotItem(peak_x, peak_y, pen=pg.mkPen('b'), brush=pg.mkBrush(0, 0, 255, 150))
+            panel.add_item(axis_id, minima_plot)
+            axis.min_peaks = list(zip(peak_x, peak_y)) 
+
+            min_info = "\n".join([f"Minimum {i + 1}: X = {px}, Y = {py}" for i, (px, py) in enumerate(zip(peak_x, peak_y))])
+            QtWidgets.QMessageBox.information(self, "Minimum Peak Analysis", f"Minima in Panel {panel_id + 1} (Selected Region):\n\n{min_info}")
 
     def create_spectrogram_checkbox(self) -> QtWidgets.QGroupBox:
         spectrogram_group_box = QtWidgets.QGroupBox("Select Spectrogram")
@@ -1157,7 +1364,6 @@ class MainWindow(QtWidgets.QMainWindow):
             item._curve_type.setCurrentIndex(index)
 
         item.panel_choice.setCurrentIndex(panel_id)
-
         item._derivation_type.setCurrentIndex(derivation_id)
 
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
@@ -1167,7 +1373,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'generator_function': generator_function
         }
     def add_custom_f0_curve(self, params, panel_id):
-        derivation_id = 0  
+        derivation_id = 0 
         curve_values = self.curve_generator.generate_custom_f0(self.audio_path, params, derivation_id)
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
@@ -1262,7 +1468,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.custom_mfcc_params[row_id] = params
 
     def add_custom_amplitude_curve(self, params, panel_id):
-        derivation_id = 0 
+        derivation_id = 0  
         curve_values = self.curve_generator.generate_custom_amplitude(self.audio_path, params, derivation_id)
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
