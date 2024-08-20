@@ -7,3 +7,4 @@ PYQtGraph
 praat-parselmouth
 tgt
 bidict
+findiff
