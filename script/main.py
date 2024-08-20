@@ -17,7 +17,13 @@ import time
 from scipy.io import wavfile
 from config_dialog import UnifiedConfigDialog
 from mfcc import load_channel, get_MFCCS_change
-from calc import calc_formants, calculate_amplitude_envelope,get_f0,get_velocity,read_AG50x
+from calc import (
+    calc_formants,
+    calculate_amplitude_envelope,
+    get_f0,
+    get_velocity,
+    read_AG50x,
+)
 from ui import Crosshair, create_plot_widget, ZoomToolbar
 from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
@@ -31,13 +37,15 @@ from quadruple_axis_plot_item import (
 import csv
 
 from scipy.signal import find_peaks
+
+
 class POSChannelSelectionDialog(QtWidgets.QDialog):
     def __init__(self, pos_channels, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select and Rename POS Channels")
         self.pos_channels = pos_channels
         self.selected_channels = {}
-        
+
         self.layout = QtWidgets.QVBoxLayout(self)
         channel_layout = QtWidgets.QGridLayout()
 
@@ -48,7 +56,7 @@ class POSChannelSelectionDialog(QtWidgets.QDialog):
             checkbox = QtWidgets.QCheckBox(f"Channel {channel}")
             rename_edit = QtWidgets.QLineEdit(self)
             rename_edit.setPlaceholderText("Enter new name (optional)")
-            
+
             self.checkboxes[channel] = checkbox
             self.rename_edits[channel] = rename_edit
 
@@ -70,9 +78,14 @@ class POSChannelSelectionDialog(QtWidgets.QDialog):
     def get_selected_channels(self):
         for channel, checkbox in self.checkboxes.items():
             if checkbox.isChecked():
-                custom_name = self.rename_edits[channel].text() if self.rename_edits[channel].text() else f"Channel {channel}"
+                custom_name = (
+                    self.rename_edits[channel].text()
+                    if self.rename_edits[channel].text()
+                    else f"Channel {channel}"
+                )
                 self.selected_channels[channel] = custom_name
         return self.selected_channels
+
 
 class ColorSelection(QtWidgets.QWidget):
     color_chosen = QtCore.pyqtSignal(str)
@@ -162,7 +175,8 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         self._derivation_type = QtWidgets.QComboBox()
 
         self._curve_type.addItems(
-            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]        )
+            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]
+        )
         self.ema_type.setStyleSheet(
             "background-color: lightblue; border: 1px solid black; padding: 5px"
         )
@@ -201,7 +215,6 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         return self._derivation_type.currentIndex()
 
 
-
 class Dashboard(QtWidgets.QTreeWidget):
     curve_type_changed = QtCore.pyqtSignal(int, int)
     color_changed = QtCore.pyqtSignal(int, str)
@@ -214,9 +227,9 @@ class Dashboard(QtWidgets.QTreeWidget):
     row_count: int
     headers: list[str]
 
-    def __init__(self,custom_curves) -> None:
+    def __init__(self, custom_curves) -> None:
         super().__init__()
-        self.custom_curves = custom_curves 
+        self.custom_curves = custom_curves
         self.row_count = 0
         self.headers = ["Acoustique", "EMA", "Couleur", "Panel", "Show", "Dérivée"]
 
@@ -225,8 +238,10 @@ class Dashboard(QtWidgets.QTreeWidget):
         self.resize_column()
 
     def update_curve_choices(self, item):
-        item._curve_type.addItems(["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"])
-        
+        item._curve_type.addItems(
+            ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]
+        )
+
         for custom_curve_name in self.custom_curves:
             item._curve_type.addItem(custom_curve_name)
         # for _ in range(4):
@@ -274,7 +289,7 @@ class DashboardWidget(QtWidgets.QWidget):
     def __init__(self, custom_curves) -> None:
         super().__init__()
 
-        self.dashboard = Dashboard(custom_curves)  
+        self.dashboard = Dashboard(custom_curves)
 
         add_row_button = StyledButton("+", "lightgreen")
         add_row_button.clicked.connect(self._row_added)
@@ -289,7 +304,6 @@ class DashboardWidget(QtWidgets.QWidget):
     def _row_added(self) -> None:
         self.dashboard.append_row()
         self.row_added.emit(self.dashboard.row_count)
-
 
 
 class FileLoadIndicator(QtWidgets.QGroupBox):
@@ -412,28 +426,80 @@ class DataSource(ABC):
 class Transformation(ABC):
 
     @abstractmethod
-    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
+    def transform(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        method: str,
+        width: int,
+        accOrder: int,
+        polyOrder: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
         pass
+
 
 class Trajectory(Transformation):
 
     @override
-    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
+    def transform(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        method: str,
+        width: int,
+        accOrder: int,
+        polyOrder: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
         return x, y
+
 
 class Velocity(Transformation):
 
     @override
-    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
-        velocity = get_velocity(y, sr=1.0, difference=1, method=method, width=width, accOrder=accOrder, polyOrder=polyOrder)
+    def transform(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        method: str,
+        width: int,
+        accOrder: int,
+        polyOrder: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        velocity = get_velocity(
+            y,
+            sr=1.0,
+            difference=1,
+            method=method,
+            width=width,
+            accOrder=accOrder,
+            polyOrder=polyOrder,
+        )
         return x, velocity
+
 
 class Acceleration(Transformation):
 
     @override
-    def transform(self, x: np.ndarray, y: np.ndarray, method: str, width: int, accOrder: int, polyOrder: int) -> tuple[np.ndarray, np.ndarray]:
-        acceleration = get_velocity(y, sr=1.0, difference=2, method=method, width=width, accOrder=accOrder, polyOrder=polyOrder)
+    def transform(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        method: str,
+        width: int,
+        accOrder: int,
+        polyOrder: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        acceleration = get_velocity(
+            y,
+            sr=1.0,
+            difference=2,
+            method=method,
+            width=width,
+            accOrder=accOrder,
+            polyOrder=polyOrder,
+        )
         return x, acceleration
+
 
 class Soundwave(DataSource):
 
@@ -451,45 +517,44 @@ class Mfcc(DataSource):
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         data = load_channel(audio_path)
         print(audio_path)
-        sig_sr = 10000 
-        channel_n = 0 
-        t_step = 0.005 
-        win_len = 0.025  
-        n_mfcc = 13  
-        n_fft = 512  
-        min_freq = 100 
-        max_freq = 10000  
-        remove_first = 1 
-        filt_cutoff = 12  
-        filt_ord = 6 
-        diff_method = 'grad'  
-        out_filter = 'iir'  
-        out_filt_type = 'low' 
+        sig_sr = 10000
+        channel_n = 0
+        t_step = 0.005
+        win_len = 0.025
+        n_mfcc = 13
+        n_fft = 512
+        min_freq = 100
+        max_freq = 10000
+        remove_first = 1
+        filt_cutoff = 12
+        filt_ord = 6
+        diff_method = "grad"
+        out_filter = "iir"
+        out_filt_type = "low"
         out_filt_cutoff = [12]
-        out_filt_len = 6 
-        out_filt_poly_ord = 3  
+        out_filt_len = 6
+        out_filt_poly_ord = 3
 
         y, x = get_MFCCS_change(
-            audio_path, 
-            sig_sr, 
-            channelN=channel_n, 
-            tStep=t_step, 
-            winLen=win_len, 
-            n_mfcc=n_mfcc, 
-            n_fft=n_fft, 
-            minFreq=min_freq, 
-            maxFreq=max_freq, 
-            removeFirst=remove_first, 
-            filtCutoff=filt_cutoff, 
-            filtOrd=filt_ord, 
-            diffMethod=diff_method, 
+            audio_path,
+            sig_sr,
+            channelN=channel_n,
+            tStep=t_step,
+            winLen=win_len,
+            n_mfcc=n_mfcc,
+            n_fft=n_fft,
+            minFreq=min_freq,
+            maxFreq=max_freq,
+            removeFirst=remove_first,
+            filtCutoff=filt_cutoff,
+            filtOrd=filt_ord,
+            diffMethod=diff_method,
             outFilter=out_filter,
             outFiltType=out_filt_type,
-            outFiltCutOff=out_filt_cutoff, 
-            outFiltLen=out_filt_len,  
-            outFiltPolyOrd=out_filt_poly_ord
+            outFiltCutOff=out_filt_cutoff,
+            outFiltLen=out_filt_len,
+            outFiltPolyOrd=out_filt_poly_ord,
         )
-
 
         return x, y
 
@@ -522,24 +587,26 @@ class Formant3(DataSource):
             parselmouth.Sound(audio_path), 0, 99999, 40
         )
         return f_times, f3_values
+
+
 class F0(DataSource):
 
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         sig_sr, audio_data = wavfile.read(audio_path)
         if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0] 
+            audio_data = audio_data[:, 0]
 
-        method = 'praatac'  
-        hop_size = 0.01 
-        min_pitch = 75 
-        max_pitch = 600  
-        interp_unvoiced = 'linear'  
-        out_filter = 'iir' 
-        out_filt_type = 'low' 
-        out_filt_cutoff = [12] 
-        out_filt_len = 6 
-        out_filt_poly_ord = 3 
+        method = "praatac"
+        hop_size = 0.01
+        min_pitch = 75
+        max_pitch = 600
+        interp_unvoiced = "linear"
+        out_filter = "iir"
+        out_filt_type = "low"
+        out_filt_cutoff = [12]
+        out_filt_len = 6
+        out_filt_poly_ord = 3
 
         f0, f0_times = get_f0(
             audio_data,
@@ -553,9 +620,11 @@ class F0(DataSource):
             outFiltType=out_filt_type,
             outFiltCutOff=out_filt_cutoff,
             outFiltLen=out_filt_len,
-            outFiltPolyOrd=out_filt_poly_ord
+            outFiltPolyOrd=out_filt_poly_ord,
         )
         return f0_times, f0
+
+
 class AmplitudeEnvelope(DataSource):
 
     @override
@@ -563,8 +632,9 @@ class AmplitudeEnvelope(DataSource):
         sample_rate, audio_signal = wavfile.read(audio_path)
 
         # audio_signal = audio_signal[int(start * sample_rate):int(end * sample_rate)]
-        amplitude_envelope,time_axis = calculate_amplitude_envelope(audio_signal, sample_rate)
-
+        amplitude_envelope, time_axis = calculate_amplitude_envelope(
+            audio_signal, sample_rate
+        )
 
         return time_axis, amplitude_envelope
 
@@ -628,7 +698,9 @@ class CurveGenerator:
             CurvePlotter(),
         ]
 
-    def generate(self, audio_path: str, curve_type_id: int, curve_derivation: int) -> CalculationValues:
+    def generate(
+        self, audio_path: str, curve_type_id: int, curve_derivation: int
+    ) -> CalculationValues:
         if curve_type_id < 0 or curve_type_id >= len(self.datasources):
             raise IndexError("Curve type ID is out of range")
 
@@ -641,15 +713,24 @@ class CurveGenerator:
         plotter = self.plotters[curve_type_id]
 
         data = source.calculate(audio_path)
-        derivative_method = "gradient"  
-        sg_width = 3  
-        fin_diff_acc_order = 2  
-        sg_poly_order = 2 
+        derivative_method = "gradient"
+        sg_width = 3
+        fin_diff_acc_order = 2
+        sg_poly_order = 2
 
-        x, y = operation.transform(*data, method=derivative_method, width=sg_width, accOrder=fin_diff_acc_order, polyOrder=sg_poly_order)
+        x, y = operation.transform(
+            *data,
+            method=derivative_method,
+            width=sg_width,
+            accOrder=fin_diff_acc_order,
+            polyOrder=sg_poly_order,
+        )
 
         return plotter.plot(x, y)
-    def generate_custom_formant2(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+
+    def generate_custom_formant2(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
         sound = parselmouth.Sound(audio_path)
         f_times, _, f2_values, _ = calc_formants(
             sound,
@@ -660,17 +741,25 @@ class CurveGenerator:
             max_number_of_formants=params["max_num_formants"],
             maximum_formant=params["max_formant"],
             window_length=params["window_length"],
-            pre_emphasis_from=params["pre_emphasis_from"]
+            pre_emphasis_from=params["pre_emphasis_from"],
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f_times, f2_values, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+        x, y = operation.transform(
+            f_times,
+            f2_values,
+            params["derivative_method"],
+            params["sg_width"],
+            params["fin_diff_acc_order"],
+            params["sg_poly_order"],
+        )
 
-        
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
 
-    def generate_custom_formant3(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+    def generate_custom_formant3(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
         sound = parselmouth.Sound(audio_path)
         f_times, _, _, f3_values = calc_formants(
             sound,
@@ -681,16 +770,25 @@ class CurveGenerator:
             max_number_of_formants=params["max_num_formants"],
             maximum_formant=params["max_formant"],
             window_length=params["window_length"],
-            pre_emphasis_from=params["pre_emphasis_from"]
+            pre_emphasis_from=params["pre_emphasis_from"],
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f_times, f3_values, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+        x, y = operation.transform(
+            f_times,
+            f3_values,
+            params["derivative_method"],
+            params["sg_width"],
+            params["fin_diff_acc_order"],
+            params["sg_poly_order"],
+        )
 
-        
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
-    def generate_custom_formant1(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+
+    def generate_custom_formant1(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
         sound = parselmouth.Sound(audio_path)
         f_times, f1_values, _, _ = calc_formants(
             sound,
@@ -701,17 +799,25 @@ class CurveGenerator:
             max_number_of_formants=params["max_num_formants"],
             maximum_formant=params["max_formant"],
             window_length=params["window_length"],
-            pre_emphasis_from=params["pre_emphasis_from"]
+            pre_emphasis_from=params["pre_emphasis_from"],
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f_times, f1_values, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+        x, y = operation.transform(
+            f_times,
+            f1_values,
+            params["derivative_method"],
+            params["sg_width"],
+            params["fin_diff_acc_order"],
+            params["sg_poly_order"],
+        )
 
-        
         plotter = ScatterPlotPlotter()
         return plotter.plot(x, y)
 
-    def generate_custom_mfcc(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+    def generate_custom_mfcc(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
         y, x = get_MFCCS_change(
             audio_path,
             params["signal_sample_rate"],
@@ -728,15 +834,24 @@ class CurveGenerator:
             outFiltType=params["outFiltType"],
             outFiltCutOff=params["outFiltCutOff"],
             outFiltLen=params["outFiltLen"],
-            outFiltPolyOrd=params["outFiltPolyOrd"]
+            outFiltPolyOrd=params["outFiltPolyOrd"],
         )
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(x, y, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+        x, y = operation.transform(
+            x,
+            y,
+            params["derivative_method"],
+            params["sg_width"],
+            params["fin_diff_acc_order"],
+            params["sg_poly_order"],
+        )
 
         plotter = CurvePlotter()
         return plotter.plot(x, y)
-    
-    def generate_custom_amplitude(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+
+    def generate_custom_amplitude(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
         sample_rate, audio_signal = wavfile.read(audio_path)
         amplitude, time_axis = calculate_amplitude_envelope(
             audio_signal,
@@ -749,18 +864,28 @@ class CurveGenerator:
             outFiltType=params["outFiltType"],
             outFiltCutOff=params["outFiltCutOff"],
             outFiltLen=params["outFiltLen"],
-            outFiltPolyOrd=params["outFiltPolyOrd"]
+            outFiltPolyOrd=params["outFiltPolyOrd"],
         )
 
         operation = self.derivations[derivation_id]
-        time_axis, amplitude = operation.transform(time_axis, amplitude, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+        time_axis, amplitude = operation.transform(
+            time_axis,
+            amplitude,
+            params["derivative_method"],
+            params["sg_width"],
+            params["fin_diff_acc_order"],
+            params["sg_poly_order"],
+        )
 
         plotter = CurvePlotter()
         return plotter.plot(time_axis, amplitude)
-    def generate_custom_f0(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
+
+    def generate_custom_f0(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
         sig_sr, audio_data = wavfile.read(audio_path)
         if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0] 
+            audio_data = audio_data[:, 0]
 
         f0, f0_times = get_f0(
             audio_data,
@@ -774,14 +899,23 @@ class CurveGenerator:
             outFiltType=params["outFiltType"],
             outFiltCutOff=params["outFiltCutOff"],
             outFiltLen=params["outFiltLen"],
-            outFiltPolyOrd=params["outFiltPolyOrd"]
+            outFiltPolyOrd=params["outFiltPolyOrd"],
         )
 
         operation = self.derivations[derivation_id]
-        x, y = operation.transform(f0_times, f0, params["derivative_method"], params["sg_width"], params["fin_diff_acc_order"], params["sg_poly_order"])
+        x, y = operation.transform(
+            f0_times,
+            f0,
+            params["derivative_method"],
+            params["sg_width"],
+            params["fin_diff_acc_order"],
+            params["sg_poly_order"],
+        )
 
         plotter = CurvePlotter()
         return plotter.plot(x, y)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     audio_path: str | None
     audio_widget: SoundInformation
@@ -796,7 +930,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.init_main_layout()
-        self.custom_curves = {} 
+        self.custom_curves = {}
         self.audio_path = None
         self.audio_widget = SoundInformation()
 
@@ -805,7 +939,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
         self.curve_generator = CurveGenerator()
-        self.dashboard_widget = DashboardWidget(self.custom_curves) 
+        self.dashboard_widget = DashboardWidget(self.custom_curves)
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -816,7 +950,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.tier_selection = TierSelection()
         self.config_mfcc_button = StyledButton("Configure")
-        self.custom_curves = {} 
+        self.custom_curves = {}
         self.tier_selection.tier_checked.connect(
             lambda tier_name: self.annotation_widget.display(
                 self.annotation_data.get_tier_by_name(tier_name)
@@ -869,12 +1003,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stream = None
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start(100) 
+        self.timer.start(100)
         self.playing = False
         self.audio_cursor = pg.LinearRegionItem()
-        self.audio_cursor.setBrush(pg.mkBrush(0, 255, 0, 50)) 
+        self.audio_cursor.setBrush(pg.mkBrush(0, 255, 0, 50))
         self.audio_widget.sound_plot.addItem(self.audio_cursor)
         self.audio_cursor.hide()
+
     def init_main_layout(self) -> None:
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
@@ -891,6 +1026,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         main_layout.addWidget(curve_column_widget, 3)
         main_layout.addWidget(control_column_widget, 2)
+
     def create_load_buttons(self) -> QtWidgets.QGroupBox:
         load_group_box = QtWidgets.QGroupBox("Load Audio, TextGrid and POS")
         load_layout = QtWidgets.QVBoxLayout()
@@ -912,6 +1048,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         load_group_box.setLayout(load_layout)
         return load_group_box
+
     def load_pos_file(self) -> None:
         pos_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open POS File", "", "POS Files (*.pos)"
@@ -921,7 +1058,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.pos_data = read_AG50x(pos_path)
-        self.pos_channels = self.pos_data.channels.values  
+        self.pos_channels = self.pos_data.channels.values
 
         dialog = POSChannelSelectionDialog(self.pos_channels, self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
@@ -931,26 +1068,25 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def add_pos_channels_to_dashboard(self, selected_channels: dict) -> None:
         for original_channel_id, custom_name in selected_channels.items():
-            channel_id = int(original_channel_id) 
-            channel_name = custom_name 
+            channel_id = int(original_channel_id)
+            channel_name = custom_name
 
             self.custom_curves[channel_name] = {
-                'generator_function': self.generate_pos_curve,
-                'params': {
-                    'channel_id': channel_id
-                }
+                "generator_function": self.generate_pos_curve,
+                "params": {"channel_id": channel_id},
             }
             for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
                 item = self.dashboard_widget.dashboard.topLevelItem(i)
                 item._curve_type.addItem(channel_name)
 
-
-    def generate_pos_curve(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
-        channel_id = params['channel_id']
+    def generate_pos_curve(
+        self, audio_path: str, params: dict, derivation_id: int
+    ) -> CalculationValues:
+        channel_id = params["channel_id"]
         pos_data = self.pos_data.ema.sel(channels=channel_id)
 
         time_axis = pos_data.time.values
-        y_values = pos_data.sel(dimensions='z').values 
+        y_values = pos_data.sel(dimensions="z").values
 
         operation = self.curve_generator.derivations[derivation_id]
         x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
@@ -974,14 +1110,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_control_widget(self, widget: QtWidgets.QWidget) -> None:
         self.control_column_layout.addWidget(widget)
 
-
-
     def create_audio_control_buttons(self) -> QtWidgets.QGroupBox:
         audio_control_group_box = QtWidgets.QGroupBox("Audio Control")
         audio_control_layout = QtWidgets.QVBoxLayout()
 
         play_button = StyledButton("Play Selected Region")
-
 
         play_button.clicked.connect(self.play_selected_region)
 
@@ -989,12 +1122,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         audio_control_group_box.setLayout(audio_control_layout)
         return audio_control_group_box
+
     def create_analysis_controls(self) -> QtWidgets.QWidget:
         analysis_controls_widget = QtWidgets.QWidget()
         layout = QtWidgets.QHBoxLayout()
 
         self.panel_selector = QtWidgets.QComboBox()
-        self.panel_selector.addItems([f"Panel {i + 1}" for i in range(len(self.panels))])
+        self.panel_selector.addItems(
+            [f"Panel {i + 1}" for i in range(len(self.panels))]
+        )
 
         self.analyze_max_button = QtWidgets.QPushButton("Analyze Max Peaks")
         self.analyze_min_button = QtWidgets.QPushButton("Analyze Min Peaks")
@@ -1007,10 +1143,9 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.panel_selector)
         layout.addWidget(self.analyze_max_button)
         layout.addWidget(self.analyze_min_button)
-        layout.addWidget(self.export_csv_button) 
+        layout.addWidget(self.export_csv_button)
         analysis_controls_widget.setLayout(layout)
         return analysis_controls_widget
-
 
     def export_to_csv(self):
         panel_id = self.panel_selector.currentIndex()
@@ -1031,12 +1166,12 @@ class MainWindow(QtWidgets.QMainWindow):
             axis_id = i
 
             curve_layout = QtWidgets.QHBoxLayout()
-            curve_label = QtWidgets.QLabel(f"Curve {axis_id + 1}: {curve_name}")  
+            curve_label = QtWidgets.QLabel(f"Curve {axis_id + 1}: {curve_name}")
             curve_options[axis_id] = {
-                'x': QtWidgets.QCheckBox("X"),
-                'y': QtWidgets.QCheckBox("Y"),
-                'min': QtWidgets.QCheckBox("Min Peaks"),
-                'max': QtWidgets.QCheckBox("Max Peaks")
+                "x": QtWidgets.QCheckBox("X"),
+                "y": QtWidgets.QCheckBox("Y"),
+                "min": QtWidgets.QCheckBox("Min Peaks"),
+                "max": QtWidgets.QCheckBox("Max Peaks"),
             }
 
             curve_layout.addWidget(curve_label)
@@ -1045,7 +1180,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
             layout.addLayout(curve_layout)
 
-        button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+        )
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
@@ -1053,10 +1190,16 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.setLayout(layout)
 
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            selected_data = {axis_id: opts for axis_id, opts in curve_options.items() if any(cb.isChecked() for cb in opts.values())}
+            selected_data = {
+                axis_id: opts
+                for axis_id, opts in curve_options.items()
+                if any(cb.isChecked() for cb in opts.values())
+            }
 
             if selected_data:
-                csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+                csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                    self, "Save CSV", "", "CSV Files (*.csv)"
+                )
                 if csv_path:
                     self.save_curves_to_csv(panel, selected_data, csv_path)
 
@@ -1078,31 +1221,35 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 continue
 
-            curve_data[axis_id] = {'x': x_data, 'y': y_data, 'min': [], 'max': []}
+            curve_data[axis_id] = {"x": x_data, "y": y_data, "min": [], "max": []}
 
-            if options['min'].isChecked():
-                curve_data[axis_id]['min'] = [(x, y) for x, y in axis.min_peaks if region_start <= x <= region_end]
-            if options['max'].isChecked():
-                curve_data[axis_id]['max'] = [(x, y) for x, y in axis.max_peaks if region_start <= x <= region_end]
+            if options["min"].isChecked():
+                curve_data[axis_id]["min"] = [
+                    (x, y) for x, y in axis.min_peaks if region_start <= x <= region_end
+                ]
+            if options["max"].isChecked():
+                curve_data[axis_id]["max"] = [
+                    (x, y) for x, y in axis.max_peaks if region_start <= x <= region_end
+                ]
 
-            if options['x'].isChecked() or options['y'].isChecked():
+            if options["x"].isChecked() or options["y"].isChecked():
                 all_times.update(x_data)
 
         all_times = sorted(all_times)
 
-        with open(csv_path, mode='w', newline='') as file:
+        with open(csv_path, mode="w", newline="") as file:
             writer = csv.writer(file)
-            
+
             headers = ["Time"]
             for axis_id, options in selected_data.items():
-                if options['x'].isChecked():
+                if options["x"].isChecked():
                     headers.append(f"Curve {axis_id} X")
-                if options['y'].isChecked():
+                if options["y"].isChecked():
                     headers.append(f"Curve {axis_id} Y")
-                if options['min'].isChecked():
+                if options["min"].isChecked():
                     headers.append(f"Curve {axis_id} Min Peaks X")
                     headers.append(f"Curve {axis_id} Min Peaks Y")
-                if options['max'].isChecked():
+                if options["max"].isChecked():
                     headers.append(f"Curve {axis_id} Max Peaks X")
                     headers.append(f"Curve {axis_id} Max Peaks Y")
             writer.writerow(headers)
@@ -1110,20 +1257,32 @@ class MainWindow(QtWidgets.QMainWindow):
                 row = [t]
                 for axis_id, options in selected_data.items():
                     data = curve_data[axis_id]
-                    if options['x'].isChecked():
-                        row.append(t if t in data['x'] else np.nan)
-                    if options['y'].isChecked():
-                        y_value = np.interp(t, data['x'], data['y']) if t in data['x'] else np.nan
+                    if options["x"].isChecked():
+                        row.append(t if t in data["x"] else np.nan)
+                    if options["y"].isChecked():
+                        y_value = (
+                            np.interp(t, data["x"], data["y"])
+                            if t in data["x"]
+                            else np.nan
+                        )
                         row.append(y_value)
-                    if options['min'].isChecked():
-                        min_peak = next((p for p in data['min'] if p[0] == t), (np.nan, np.nan))
+                    if options["min"].isChecked():
+                        min_peak = next(
+                            (p for p in data["min"] if p[0] == t), (np.nan, np.nan)
+                        )
                         row.extend(min_peak)
-                    if options['max'].isChecked():
-                        max_peak = next((p for p in data['max'] if p[0] == t), (np.nan, np.nan))
+                    if options["max"].isChecked():
+                        max_peak = next(
+                            (p for p in data["max"] if p[0] == t), (np.nan, np.nan)
+                        )
                         row.extend(max_peak)
                 writer.writerow(row)
 
-        QtWidgets.QMessageBox.information(self, "Export Successful", f"Data has been successfully exported to {csv_path}")
+        QtWidgets.QMessageBox.information(
+            self,
+            "Export Successful",
+            f"Data has been successfully exported to {csv_path}",
+        )
 
     def analyze_max_peaks(self) -> None:
         panel_id = self.panel_selector.currentIndex()
@@ -1153,12 +1312,23 @@ class MainWindow(QtWidgets.QMainWindow):
 
             peak_x = x_data_region[peaks]
             peak_y = y_data_region[peaks]
-            peaks_plot = pg.ScatterPlotItem(peak_x, peak_y, pen=pg.mkPen('r'), brush=pg.mkBrush(255, 0, 0, 150))
+            peaks_plot = pg.ScatterPlotItem(
+                peak_x, peak_y, pen=pg.mkPen("r"), brush=pg.mkBrush(255, 0, 0, 150)
+            )
             panel.add_item(axis_id, peaks_plot)
-            axis.max_peaks = list(zip(peak_x, peak_y))  
+            axis.max_peaks = list(zip(peak_x, peak_y))
 
-            peak_info = "\n".join([f"Peak {i + 1}: X = {px}, Y = {py}" for i, (px, py) in enumerate(zip(peak_x, peak_y))])
-            QtWidgets.QMessageBox.information(self, "Peak Analysis", f"Peaks in Panel {panel_id + 1} (Selected Region):\n\n{peak_info}")
+            peak_info = "\n".join(
+                [
+                    f"Peak {i + 1}: X = {px}, Y = {py}"
+                    for i, (px, py) in enumerate(zip(peak_x, peak_y))
+                ]
+            )
+            QtWidgets.QMessageBox.information(
+                self,
+                "Peak Analysis",
+                f"Peaks in Panel {panel_id + 1} (Selected Region):\n\n{peak_info}",
+            )
 
     def analyze_min_peaks(self) -> None:
         panel_id = self.panel_selector.currentIndex()
@@ -1188,12 +1358,23 @@ class MainWindow(QtWidgets.QMainWindow):
 
             peak_x = x_data_region[peaks]
             peak_y = y_data_region[peaks]
-            minima_plot = pg.ScatterPlotItem(peak_x, peak_y, pen=pg.mkPen('b'), brush=pg.mkBrush(0, 0, 255, 150))
+            minima_plot = pg.ScatterPlotItem(
+                peak_x, peak_y, pen=pg.mkPen("b"), brush=pg.mkBrush(0, 0, 255, 150)
+            )
             panel.add_item(axis_id, minima_plot)
-            axis.min_peaks = list(zip(peak_x, peak_y)) 
+            axis.min_peaks = list(zip(peak_x, peak_y))
 
-            min_info = "\n".join([f"Minimum {i + 1}: X = {px}, Y = {py}" for i, (px, py) in enumerate(zip(peak_x, peak_y))])
-            QtWidgets.QMessageBox.information(self, "Minimum Peak Analysis", f"Minima in Panel {panel_id + 1} (Selected Region):\n\n{min_info}")
+            min_info = "\n".join(
+                [
+                    f"Minimum {i + 1}: X = {px}, Y = {py}"
+                    for i, (px, py) in enumerate(zip(peak_x, peak_y))
+                ]
+            )
+            QtWidgets.QMessageBox.information(
+                self,
+                "Minimum Peak Analysis",
+                f"Minima in Panel {panel_id + 1} (Selected Region):\n\n{min_info}",
+            )
 
     def create_spectrogram_checkbox(self) -> QtWidgets.QGroupBox:
         spectrogram_group_box = QtWidgets.QGroupBox("Select Spectrogram")
@@ -1279,7 +1460,9 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             curve.hide()
 
-    def update_curve(self, row_id: int, curve_type_id: int, curve_derivation_id: int) -> None:
+    def update_curve(
+        self, row_id: int, curve_type_id: int, curve_derivation_id: int
+    ) -> None:
         if not self.audio_path:
             return
 
@@ -1288,15 +1471,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
         curve_name = item._curve_type.currentText()
-        derivation_id = item._derivation_type.currentIndex() 
+        derivation_id = item._derivation_type.currentIndex()
 
         if curve_name in self.custom_curves:
             custom_curve_config = self.custom_curves[curve_name]
-            generator_function = custom_curve_config['generator_function']
-            params = custom_curve_config['params']
+            generator_function = custom_curve_config["generator_function"]
+            params = custom_curve_config["params"]
             new_curve = generator_function(self.audio_path, params, derivation_id)
         else:
-            if curve_type_id >= 0 and curve_type_id < len(self.curve_generator.datasources):
+            if curve_type_id >= 0 and curve_type_id < len(
+                self.curve_generator.datasources
+            ):
                 new_curve = self.curve_generator.generate(
                     self.audio_path, curve_type_id, derivation_id
                 )
@@ -1335,18 +1520,51 @@ class MainWindow(QtWidgets.QMainWindow):
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             params = dialog.get_parameters()
             if params["mfcc"]["enabled"]:
-                self.add_custom_curve(params["mfcc"], params["mfcc"]["panel"], "Custom MFCC", self.curve_generator.generate_custom_mfcc)
+                self.add_custom_curve(
+                    params["mfcc"],
+                    params["mfcc"]["panel"],
+                    "Custom MFCC",
+                    self.curve_generator.generate_custom_mfcc,
+                )
             if params["amplitude"]["enabled"]:
-                self.add_custom_curve(params["amplitude"], params["amplitude"]["panel"], "Custom Amplitude", self.curve_generator.generate_custom_amplitude)
+                self.add_custom_curve(
+                    params["amplitude"],
+                    params["amplitude"]["panel"],
+                    "Custom Amplitude",
+                    self.curve_generator.generate_custom_amplitude,
+                )
             if params["formant1"]["enabled"]:
-                self.add_custom_curve(params["formant1"], params["formant1"]["panel"], "Custom Formant1", self.curve_generator.generate_custom_formant1)
+                self.add_custom_curve(
+                    params["formant1"],
+                    params["formant1"]["panel"],
+                    "Custom Formant1",
+                    self.curve_generator.generate_custom_formant1,
+                )
             if params["formant2"]["enabled"]:
-                self.add_custom_curve(params["formant2"], params["formant2"]["panel"], "Custom Formant2", self.curve_generator.generate_custom_formant2)
+                self.add_custom_curve(
+                    params["formant2"],
+                    params["formant2"]["panel"],
+                    "Custom Formant2",
+                    self.curve_generator.generate_custom_formant2,
+                )
             if params["formant3"]["enabled"]:
-                self.add_custom_curve(params["formant3"], params["formant3"]["panel"], "Custom Formant3", self.curve_generator.generate_custom_formant3)
+                self.add_custom_curve(
+                    params["formant3"],
+                    params["formant3"]["panel"],
+                    "Custom Formant3",
+                    self.curve_generator.generate_custom_formant3,
+                )
             if params["f0"]["enabled"]:
-                self.add_custom_curve(params["f0"], params["f0"]["panel"], "Custom F0", self.curve_generator.generate_custom_f0)
-    def add_custom_curve(self, params, panel_id, default_curve_name, generator_function):
+                self.add_custom_curve(
+                    params["f0"],
+                    params["f0"]["panel"],
+                    "Custom F0",
+                    self.curve_generator.generate_custom_f0,
+                )
+
+    def add_custom_curve(
+        self, params, panel_id, default_curve_name, generator_function
+    ):
         derivation_id = params["derivation_type"]
 
         curve_values = generator_function(self.audio_path, params, derivation_id)
@@ -1368,122 +1586,136 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_curves[curve_name] = {
-            'params': params,
-            'panel_id': panel_id,
-            'generator_function': generator_function
+            "params": params,
+            "panel_id": panel_id,
+            "generator_function": generator_function,
         }
+
     def add_custom_f0_curve(self, params, panel_id):
-        derivation_id = 0 
-        curve_values = self.curve_generator.generate_custom_f0(self.audio_path, params, derivation_id)
+        derivation_id = 0
+        curve_values = self.curve_generator.generate_custom_f0(
+            self.audio_path, params, derivation_id
+        )
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
 
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
         item._curve_type.addItem(params["name"])
         index = item._curve_type.findText(params["name"])
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_f0_params[row_id] = params
+
     def add_custom_formant1_curve(self, params, panel_id):
-        curve_values = self.curve_generator.generate_custom_formant1(self.audio_path, params, 0)
+        curve_values = self.curve_generator.generate_custom_formant1(
+            self.audio_path, params, 0
+        )
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
 
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
         item._curve_type.addItem(params["name"])
         index = item._curve_type.findText(params["name"])
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_formant1_params[row_id] = params
 
     def add_custom_formant2_curve(self, params, panel_id):
-        curve_values = self.curve_generator.generate_custom_formant2(self.audio_path, params, 0)
+        curve_values = self.curve_generator.generate_custom_formant2(
+            self.audio_path, params, 0
+        )
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
 
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
         item._curve_type.addItem(params["name"])
         index = item._curve_type.findText(params["name"])
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_formant2_params[row_id] = params
 
     def add_custom_formant3_curve(self, params, panel_id):
-        curve_values = self.curve_generator.generate_custom_formant3(self.audio_path, params, 0)
+        curve_values = self.curve_generator.generate_custom_formant3(
+            self.audio_path, params, 0
+        )
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
 
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
         item._curve_type.addItem(params["name"])
         index = item._curve_type.findText(params["name"])
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_formant3_params[row_id] = params
 
     def add_custom_mfcc_curve(self, params, panel_id):
-        curve_values = self.curve_generator.generate_custom_mfcc(self.audio_path, params, 0)
+        curve_values = self.curve_generator.generate_custom_mfcc(
+            self.audio_path, params, 0
+        )
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
 
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
         item._curve_type.addItem(params["name"])
         index = item._curve_type.findText(params["name"])
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_mfcc_params[row_id] = params
 
     def add_custom_amplitude_curve(self, params, panel_id):
-        derivation_id = 0  
-        curve_values = self.curve_generator.generate_custom_amplitude(self.audio_path, params, derivation_id)
+        derivation_id = 0
+        curve_values = self.curve_generator.generate_custom_amplitude(
+            self.audio_path, params, derivation_id
+        )
         panel = self.panels[panel_id].panel
         panel.add_curve(curve_values)
 
         self.dashboard_widget.dashboard.append_row()
         row_id = self.dashboard_widget.dashboard.row_count - 1
         item = self.dashboard_widget.dashboard.topLevelItem(row_id)
-        
+
         item._curve_type.addItem(params["name"])
         index = item._curve_type.findText(params["name"])
         if index != -1:
             item._curve_type.setCurrentIndex(index)
-        
+
         item.panel_choice.setCurrentIndex(panel_id)
-        
+
         self.curves[row_id] = [curve_values, self.panels[panel_id]]
         self.custom_amplitude_params[row_id] = params
 
@@ -1497,7 +1729,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recording = True
         self.frames = []
         self.record_button.setText("Stop Recording")
-        self.stream = sd.InputStream(callback=self.audio_callback, channels=1, samplerate=44100, dtype='int16')
+        self.stream = sd.InputStream(
+            callback=self.audio_callback, channels=1, samplerate=44100, dtype="int16"
+        )
         self.stream.start()
 
     def stop_recording(self):
@@ -1509,8 +1743,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         recorded_audio = np.concatenate(self.frames, axis=0)
         non_zero_audio_data = recorded_audio[recorded_audio != 0]
-        
-        audio_path, _ = QFileDialog.getSaveFileName(self, "Save Recorded Audio", "", "Audio Files (*.wav)")
+
+        audio_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Recorded Audio", "", "Audio Files (*.wav)"
+        )
         if audio_path:
             wavfile.write(audio_path, 44100, non_zero_audio_data)
 
@@ -1518,7 +1754,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.audio_indicator.file_loaded(audio_path)
             self.audio_widget.set_data(Parselmouth(audio_path))
             self.reset_curves()
-
 
     def audio_callback(self, indata, frames, time, status):
         if self.recording:
@@ -1538,7 +1773,7 @@ class MainWindow(QtWidgets.QMainWindow):
         start, end = region
         duration = end - start
         audio = AudioSegment.from_wav(self.audio_path)
-        selected_audio = audio[start * 1000:end * 1000]
+        selected_audio = audio[start * 1000 : end * 1000]
 
         def play_audio():
             self.playing = True
@@ -1549,7 +1784,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.audio_cursor.setRegion([start, start])
         self.audio_cursor.show()
-        threading.Thread(target=self.animate_cursor, args=(start, end, duration)).start()
+        threading.Thread(
+            target=self.animate_cursor, args=(start, end, duration)
+        ).start()
 
     def animate_cursor(self, start, end, duration):
         start_time = time.time()
@@ -1563,6 +1800,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def stop_audio(self):
         self.audio_cursor.hide()
         self.playing = False
+
+
 if __name__ == "__main__":
     pg.setConfigOptions(foreground="black", background="w")
     app = QtWidgets.QApplication(sys.argv)
