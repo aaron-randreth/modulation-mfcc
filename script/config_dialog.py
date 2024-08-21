@@ -1,4 +1,4 @@
-
+import json
 from PyQt5 import QtWidgets, QtCore
 class UnifiedConfigDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
@@ -413,6 +413,173 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.toggle_formant2_fields(self.formant2_enable_checkbox.checkState())
         self.toggle_formant3_fields(self.formant3_enable_checkbox.checkState())
         self.toggle_f0_fields(self.f0_enable_checkbox.checkState())
+        self.save_button = QtWidgets.QPushButton("Save Config")
+        self.save_button.clicked.connect(self.save_config)
+
+        self.load_button = QtWidgets.QPushButton("Load Config")
+        self.load_button.clicked.connect(self.load_config)
+
+        # Adding the buttons to the layout
+        scroll_layout.addWidget(self.save_button, 3, 0, 1, 1)
+        scroll_layout.addWidget(self.load_button, 3, 1, 1, 1)
+        scroll_layout.addWidget(self.apply_button, 3, 2, 1, 1)
+
+        self.layout.addWidget(scroll_area)
+        self.setLayout(self.layout)
+    def save_config(self):
+        params = self.get_parameters()
+        options = QtWidgets.QFileDialog.Options()
+        options |= QtWidgets.QFileDialog.DontUseNativeDialog
+        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Config", "", "JSON Files (*.json);;All Files (*)", options=options)
+        if file_name:
+            with open(file_name, 'w') as file:
+                json.dump(params, file, indent=4)
+
+    def load_config(self):
+        options = QtWidgets.QFileDialog.Options()
+        options |= QtWidgets.QFileDialog.DontUseNativeDialog
+        file_name, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load Config", "", "JSON Files (*.json);;All Files (*)", options=options)
+        if file_name:
+            with open(file_name, 'r') as file:
+                params = json.load(file)
+                self.set_parameters(params)
+
+    def set_parameters(self, params):
+        # Setting the MFCC parameters
+        mfcc_params = params.get("mfcc", {})
+        if mfcc_params.get("enabled"):
+            self.mfcc_enable_checkbox.setChecked(True)
+            self.mfcc_sample_rate_input[1].setText(str(mfcc_params.get("signal_sample_rate", "")))
+            self.mfcc_tstep_input[1].setText(str(mfcc_params.get("tStep", "")))
+            self.mfcc_winlen_input[1].setText(str(mfcc_params.get("winLen", "")))
+            self.mfcc_nmfcc_input[1].setText(str(mfcc_params.get("n_mfcc", "")))
+            self.mfcc_nfft_input[1].setText(str(mfcc_params.get("n_fft", "")))
+            self.mfcc_remove_first_input[1].setText(str(mfcc_params.get("removeFirst", "")))
+            self.mfcc_filt_cutoff_input[1].setText(str(mfcc_params.get("filtCutoff", "")))
+            self.mfcc_filt_ord_input[1].setText(str(mfcc_params.get("filtOrd", "")))
+            self.mfcc_diff_method_input[1].setText(mfcc_params.get("diffMethod", ""))
+            self.mfcc_out_filter_input[1].setText(mfcc_params.get("outFilter", "None"))
+            self.mfcc_out_filt_type_input[1].setText(mfcc_params.get("outFiltType", ""))
+            self.mfcc_out_filt_cutoff_input[1].setText(" ".join(map(str, mfcc_params.get("outFiltCutOff", []))))
+            self.mfcc_out_filt_len_input[1].setText(str(mfcc_params.get("outFiltLen", "")))
+            self.mfcc_out_filt_polyord_input[1].setText(str(mfcc_params.get("outFiltPolyOrd", "")))
+            self.mfcc_name_input[1].setText(mfcc_params.get("name", ""))
+            self.mfcc_panel_choice.setCurrentIndex(mfcc_params.get("panel", 0))
+            self.mfcc_traj_radio.setChecked(mfcc_params.get("derivation_type") == 0)
+            self.mfcc_vel_radio.setChecked(mfcc_params.get("derivation_type") == 1)
+            self.mfcc_acc_radio.setChecked(mfcc_params.get("derivation_type") == 2)
+            self.mfcc_derivative_method_input[1].setText(mfcc_params.get("derivative_method", ""))
+            self.mfcc_width_input[1].setText(str(mfcc_params.get("sg_width", "")))
+            self.mfcc_acc_order_input[1].setText(str(mfcc_params.get("fin_diff_acc_order", "")))
+            self.mfcc_poly_order_input[1].setText(str(mfcc_params.get("sg_poly_order", "")))
+
+        # Setting the Amplitude parameters
+        amp_params = params.get("amplitude", {})
+        if amp_params.get("enabled"):
+            self.amp_enable_checkbox.setChecked(True)
+            self.amp_method_input[1].setText(amp_params.get("method", ""))
+            self.amp_winlen_input[1].setText(str(amp_params.get("winLen", "")))
+            self.amp_hoplen_input[1].setText(str(amp_params.get("hopLen", "")))
+            self.amp_center_input[1].setText("True" if amp_params.get("center") else "False")
+            self.amp_outfilter_input[1].setText(amp_params.get("outFilter", "None"))
+            self.amp_outfilt_type_input[1].setText(amp_params.get("outFiltType", ""))
+            self.amp_outfilt_cutoff_input[1].setText(" ".join(map(str, amp_params.get("outFiltCutOff", []))))
+            self.amp_outfilt_len_input[1].setText(str(amp_params.get("outFiltLen", "")))
+            self.amp_outfilt_polyord_input[1].setText(str(amp_params.get("outFiltPolyOrd", "")))
+            self.amp_name_input[1].setText(amp_params.get("name", ""))
+            self.amp_panel_choice.setCurrentIndex(amp_params.get("panel", 0))
+            self.amp_traj_radio.setChecked(amp_params.get("derivation_type") == 0)
+            self.amp_vel_radio.setChecked(amp_params.get("derivation_type") == 1)
+            self.amp_acc_radio.setChecked(amp_params.get("derivation_type") == 2)
+            self.amp_derivative_method_input[1].setText(amp_params.get("derivative_method", ""))
+            self.amp_width_input[1].setText(str(amp_params.get("sg_width", "")))
+            self.amp_acc_order_input[1].setText(str(amp_params.get("fin_diff_acc_order", "")))
+            self.amp_poly_order_input[1].setText(str(amp_params.get("sg_poly_order", "")))
+
+        # Setting the Formant1 parameters
+        formant1_params = params.get("formant1", {})
+        if formant1_params.get("enabled"):
+            self.formant1_enable_checkbox.setChecked(True)
+            self.formant1_energy_threshold_input[1].setText(str(formant1_params.get("energy_threshold", "")))
+            self.formant1_tstep_input[1].setText(str(formant1_params.get("time_step", "")))
+            self.formant1_max_num_formants_input[1].setText(str(formant1_params.get("max_num_formants", "")))
+            self.formant1_max_formant_input[1].setText(str(formant1_params.get("max_formant", "")))
+            self.formant1_winlen_input[1].setText(str(formant1_params.get("window_length", "")))
+            self.formant1_pre_emphasis_input[1].setText(str(formant1_params.get("pre_emphasis_from", "")))
+            self.formant1_name_input[1].setText(formant1_params.get("name", ""))
+            self.formant1_panel_choice.setCurrentIndex(formant1_params.get("panel", 0))
+            self.formant1_traj_radio.setChecked(formant1_params.get("derivation_type") == 0)
+            self.formant1_vel_radio.setChecked(formant1_params.get("derivation_type") == 1)
+            self.formant1_acc_radio.setChecked(formant1_params.get("derivation_type") == 2)
+            self.formant1_derivative_method_input[1].setText(formant1_params.get("derivative_method", ""))
+            self.formant1_width_input[1].setText(str(formant1_params.get("sg_width", "")))
+            self.formant1_acc_order_input[1].setText(str(formant1_params.get("fin_diff_acc_order", "")))
+            self.formant1_poly_order_input[1].setText(str(formant1_params.get("sg_poly_order", "")))
+
+        # Setting the Formant2 parameters
+        formant2_params = params.get("formant2", {})
+        if formant2_params.get("enabled"):
+            self.formant2_enable_checkbox.setChecked(True)
+            self.formant2_energy_threshold_input[1].setText(str(formant2_params.get("energy_threshold", "")))
+            self.formant2_tstep_input[1].setText(str(formant2_params.get("time_step", "")))
+            self.formant2_max_num_formants_input[1].setText(str(formant2_params.get("max_num_formants", "")))
+            self.formant2_max_formant_input[1].setText(str(formant2_params.get("max_formant", "")))
+            self.formant2_winlen_input[1].setText(str(formant2_params.get("window_length", "")))
+            self.formant2_pre_emphasis_input[1].setText(str(formant2_params.get("pre_emphasis_from", "")))
+            self.formant2_name_input[1].setText(formant2_params.get("name", ""))
+            self.formant2_panel_choice.setCurrentIndex(formant2_params.get("panel", 0))
+            self.formant2_traj_radio.setChecked(formant2_params.get("derivation_type") == 0)
+            self.formant2_vel_radio.setChecked(formant2_params.get("derivation_type") == 1)
+            self.formant2_acc_radio.setChecked(formant2_params.get("derivation_type") == 2)
+            self.formant2_derivative_method_input[1].setText(formant2_params.get("derivative_method", ""))
+            self.formant2_width_input[1].setText(str(formant2_params.get("sg_width", "")))
+            self.formant2_acc_order_input[1].setText(str(formant2_params.get("fin_diff_acc_order", "")))
+            self.formant2_poly_order_input[1].setText(str(formant2_params.get("sg_poly_order", "")))
+
+        # Setting the Formant3 parameters
+        formant3_params = params.get("formant3", {})
+        if formant3_params.get("enabled"):
+            self.formant3_enable_checkbox.setChecked(True)
+            self.formant3_energy_threshold_input[1].setText(str(formant3_params.get("energy_threshold", "")))
+            self.formant3_tstep_input[1].setText(str(formant3_params.get("time_step", "")))
+            self.formant3_max_num_formants_input[1].setText(str(formant3_params.get("max_num_formants", "")))
+            self.formant3_max_formant_input[1].setText(str(formant3_params.get("max_formant", "")))
+            self.formant3_winlen_input[1].setText(str(formant3_params.get("window_length", "")))
+            self.formant3_pre_emphasis_input[1].setText(str(formant3_params.get("pre_emphasis_from", "")))
+            self.formant3_name_input[1].setText(formant3_params.get("name", ""))
+            self.formant3_panel_choice.setCurrentIndex(formant3_params.get("panel", 0))
+            self.formant3_traj_radio.setChecked(formant3_params.get("derivation_type") == 0)
+            self.formant3_vel_radio.setChecked(formant3_params.get("derivation_type") == 1)
+            self.formant3_acc_radio.setChecked(formant3_params.get("derivation_type") == 2)
+            self.formant3_derivative_method_input[1].setText(formant3_params.get("derivative_method", ""))
+            self.formant3_width_input[1].setText(str(formant3_params.get("sg_width", "")))
+            self.formant3_acc_order_input[1].setText(str(formant3_params.get("fin_diff_acc_order", "")))
+            self.formant3_poly_order_input[1].setText(str(formant3_params.get("sg_poly_order", "")))
+
+        # Setting the F0 parameters
+        f0_params = params.get("f0", {})
+        if f0_params.get("enabled"):
+            self.f0_enable_checkbox.setChecked(True)
+            self.f0_method_input[1].setText(f0_params.get("method", ""))
+            self.f0_hop_size_input[1].setText(str(f0_params.get("hopSize", "")))
+            self.f0_min_pitch_input[1].setText(str(f0_params.get("minPitch", "")))
+            self.f0_max_pitch_input[1].setText(str(f0_params.get("maxPitch", "")))
+            self.f0_interp_unvoiced_input[1].setText(f0_params.get("interpUnvoiced", ""))
+            self.f0_out_filter_input[1].setText(f0_params.get("outFilter", "None"))
+            self.f0_out_filt_type_input[1].setText(f0_params.get("outFiltType", ""))
+            self.f0_out_filt_cutoff_input[1].setText(" ".join(map(str, f0_params.get("outFiltCutOff", []))))
+            self.f0_out_filt_len_input[1].setText(str(f0_params.get("outFiltLen", "")))
+            self.f0_out_filt_polyord_input[1].setText(str(f0_params.get("outFiltPolyOrd", "")))
+            self.f0_name_input[1].setText(f0_params.get("name", ""))
+            self.f0_panel_choice.setCurrentIndex(f0_params.get("panel", 0))
+            self.f0_traj_radio.setChecked(f0_params.get("derivation_type") == 0)
+            self.f0_vel_radio.setChecked(f0_params.get("derivation_type") == 1)
+            self.f0_acc_radio.setChecked(f0_params.get("derivation_type") == 2)
+            self.f0_derivative_method_input[1].setText(f0_params.get("derivative_method", ""))
+            self.f0_width_input[1].setText(str(f0_params.get("sg_width", "")))
+            self.f0_acc_order_input[1].setText(str(f0_params.get("fin_diff_acc_order", "")))
+            self.f0_poly_order_input[1].setText(str(f0_params.get("sg_poly_order", "")))
+
     def create_input_field(self, label_text, default_value):
         label = QtWidgets.QLabel(label_text)
         input_field = QtWidgets.QLineEdit(default_value)
