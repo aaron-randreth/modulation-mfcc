@@ -1077,10 +1077,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.add_control_widget(self.create_analysis_controls())
         self.add_control_widget(self.point_management_toolbar)
         self.point_management_toolbar.min_analysis_clicked.connect(
-            self.analyze_max_peaks
+            self.analyze_min_peaks
         )
         self.point_management_toolbar.max_analysis_clicked.connect(
-            self.analyze_min_peaks
+            self.analyze_max_peaks
         )
         self.point_management_toolbar.export_to_csv_clicked.connect(self.export_to_csv)
 
@@ -1277,19 +1277,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
         dialog.setLayout(layout)
 
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            selected_data = {
-                axis_id: opts
-                for axis_id, opts in curve_options.items()
-                if any(cb.isChecked() for cb in opts.values())
-            }
+        if dialog.exec_() != QtWidgets.QDialog.Accepted:
+            return
 
-            if selected_data:
-                csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-                    self, "Save CSV", "", "CSV Files (*.csv)"
-                )
-                if csv_path:
-                    self.save_curves_to_csv(panel, selected_data, csv_path)
+        selected_data = {
+            axis_id: opts
+            for axis_id, opts in curve_options.items()
+            if any(cb.isChecked() for cb in opts.values())
+        }
+
+        if not selected_data:
+            return
+
+            csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self, "Save CSV", "", "CSV Files (*.csv)"
+            )
+
+        if not csv_path:
+            return
+
+        self.save_curves_to_csv(panel, selected_data, csv_path)
 
     def save_curves_to_csv(self, panel, selected_data, csv_path):
         region = self.audio_widget.selection_region.getRegion()
@@ -1299,25 +1306,18 @@ class MainWindow(QtWidgets.QMainWindow):
         curve_data = {}
 
         for axis_id, options in selected_data.items():
-            axis = panel.rotation[axis_id]
-            if isinstance(axis.curve, pg.PlotDataItem):
-                x_data = axis.curve.xData
-                y_data = axis.curve.yData
-            elif isinstance(axis.curve, pg.ScatterPlotItem):
-                x_data = np.array([p.pos().x() for p in axis.curve.points()])
-                y_data = np.array([p.pos().y() for p in curve.points()])
-            else:
-                continue
+            calculated_curve = panel.rotation[axis_id]
+            x_data, y_data = axis.curve.getData()
 
             curve_data[axis_id] = {"x": x_data, "y": y_data, "min": [], "max": []}
 
             if options["min"].isChecked():
                 curve_data[axis_id]["min"] = [
-                    (x, y) for x, y in axis.min_peaks if region_start <= x <= region_end
+                    (x, y) for x, y in calculated_curve.min.getData() if region_start <= x <= region_end
                 ]
             if options["max"].isChecked():
                 curve_data[axis_id]["max"] = [
-                    (x, y) for x, y in axis.max_peaks if region_start <= x <= region_end
+                    (x, y) for x, y in calculated_curve.min.getData() if region_start <= x <= region_end
                 ]
 
             if options["x"].isChecked() or options["y"].isChecked():
@@ -1382,17 +1382,13 @@ class MainWindow(QtWidgets.QMainWindow):
         region = self.audio_widget.selection_region.getRegion()
         region_start, region_end = region
 
-        for axis_id, axis in panel.rotation.items():
-            curve = axis.curve
-            if isinstance(curve, pg.PlotDataItem):
-                x_data = curve.xData
-                y_data = curve.yData
-            elif isinstance(curve, pg.ScatterPlotItem):
-                x_data = np.array([p.pos().x() for p in curve.points()])
-                y_data = np.array([p.pos().y() for p in curve.points()])
-            else:
-                continue
+        for axis_id, item in panel.rotation.items():
+            calculated_curve: CalculationValues = item
+
+            x_data, y_data = calculated_curve.curve.getData()
+
             region_mask = (x_data >= region_start) & (x_data <= region_end)
+
             x_data_region = x_data[region_mask]
             y_data_region = y_data[region_mask]
 
@@ -1400,11 +1396,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
             peak_x = x_data_region[peaks]
             peak_y = y_data_region[peaks]
-            peaks_plot = pg.ScatterPlotItem(
-                peak_x, peak_y, pen=pg.mkPen("r"), brush=pg.mkBrush(255, 0, 0, 150)
-            )
-            panel.add_item(axis_id, peaks_plot)
-            axis.max_peaks = list(zip(peak_x, peak_y))
+
+            calculated_curve.max.setData(peak_x, peak_y)
 
             peak_info = "\n".join(
                 [
@@ -1428,29 +1421,22 @@ class MainWindow(QtWidgets.QMainWindow):
         region = self.audio_widget.selection_region.getRegion()
         region_start, region_end = region
 
-        for axis_id, axis in panel.rotation.items():
-            curve = axis.curve
-            if isinstance(curve, pg.PlotDataItem):
-                x_data = curve.xData
-                y_data = curve.yData
-            elif isinstance(curve, pg.ScatterPlotItem):
-                x_data = np.array([p.pos().x() for p in curve.points()])
-                y_data = np.array([p.pos().y() for p in curve.points()])
-            else:
-                continue
+        for axis_id, item in panel.rotation.items():
+            calculated_curve: CalculationValues = item
+
+            x_data, y_data = calculated_curve.curve.getData()
 
             region_mask = (x_data >= region_start) & (x_data <= region_end)
+
             x_data_region = x_data[region_mask]
             y_data_region = y_data[region_mask]
+
             peaks, _ = find_peaks(-y_data_region)
 
             peak_x = x_data_region[peaks]
             peak_y = y_data_region[peaks]
-            minima_plot = pg.ScatterPlotItem(
-                peak_x, peak_y, pen=pg.mkPen("b"), brush=pg.mkBrush(0, 0, 255, 150)
-            )
-            panel.add_item(axis_id, minima_plot)
-            axis.min_peaks = list(zip(peak_x, peak_y))
+
+            calculated_curve.min.setData(peak_x, peak_y)
 
             min_info = "\n".join(
                 [
