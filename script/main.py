@@ -174,7 +174,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
 
     def create_widgets(self) -> None:
         self._curve_type = QtWidgets.QComboBox()
-        self.ema_type = QtWidgets.QPushButton(f"Button {self.id+1},{2}")
+        self.ema_channel = QtWidgets.QComboBox()
         self.color_selection = ColorSelection()
         self.panel_choice = QtWidgets.QComboBox()
         self.visibility_checkbox = QtWidgets.QCheckBox()
@@ -183,9 +183,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         self._curve_type.addItems(
             ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]
         )
-        self.ema_type.setStyleSheet(
-            "background-color: lightblue; border: 1px solid black; padding: 5px"
-        )
+
         self.panel_choice.addItems(["1", "2", "3", "4"])
         self.visibility_checkbox.setChecked(True)
         self._derivation_type.addItems(
@@ -194,7 +192,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
 
     def lay_out_widgets(self) -> None:
         self.parent.setItemWidget(self, 0, self._curve_type)
-        self.parent.setItemWidget(self, 1, self.ema_type)
+        self.parent.setItemWidget(self, 1, self.ema_channel)
         self.parent.setItemWidget(self, 2, self.color_selection)
         self.parent.setItemWidget(self, 3, self.panel_choice)
         self.parent.setItemWidget(self, 4, self.visibility_checkbox)
@@ -202,7 +200,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
 
     def setup_signals(self) -> None:
         self.curve_type_changed = self._curve_type.currentIndexChanged
-        # self.ema_type_changed = self.ema_type.currentIndexChanged
+        self.ema_channel_changed = self.ema_channel.currentIndexChanged
         self.color_changed = self.color_selection.color_chosen
         self.panel_changed = self.panel_choice.currentIndexChanged
         self.visibility_changed = self.visibility_checkbox.stateChanged
@@ -1164,9 +1162,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 "generator_function": self.generate_pos_curve,
                 "params": {"channel_id": channel_id},
             }
+
             for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
                 item = self.dashboard_widget.dashboard.topLevelItem(i)
-                item._curve_type.addItem(channel_name)
+                item.ema_channel.addItem(channel_name)
 
     def generate_pos_curve(
         self, audio_path: str, params: dict, derivation_id: int
