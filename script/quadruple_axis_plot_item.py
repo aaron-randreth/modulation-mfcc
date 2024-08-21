@@ -1,5 +1,6 @@
 from typing import override
 from dataclasses import dataclass
+from enum import Enum
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
@@ -9,6 +10,7 @@ import tgt
 
 from praat_py_ui.parselmouth_calc import Sound, Spectrogram, Parselmouth
 from praat_py_ui import spectrogram as display_spect
+
 
 class QuadrupleAxisPlotItem(pg.PlotItem):
     central_row: int = 2
@@ -168,14 +170,147 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
         if items_count == 0 and axis_id != "left":
             axis.hide()
 
+
+class PointOperation(Enum):
+    ADD_MIN = 0
+    ADD_MAX = 1
+    REMOVE = 2
+
+
 @dataclass
 class CalculationValues:
     curve: pg.PlotDataItem | pg.PlotCurveItem | pg.ScatterPlotItem
     min: pg.ScatterPlotItem
     max: pg.ScatterPlotItem
+    toolbar: "ManualPointManagement"  # Reference to the toolbar instance
+    threshold: float = 0.2  # Define a threshold for proximity
+
+    def __post_init__(self) -> None:
+        if not isinstance(
+            self.curve, pg.PlotDataItem | pg.ScatterPlotItem | pg.PlotCurveItem
+        ):
+            raise ValueError("Incorrect type for curve")
+
+        if not isinstance(self.min, pg.ScatterPlotItem):
+            raise ValueError("Incorrect type for min")
+
+        if not isinstance(self.max, pg.ScatterPlotItem):
+            raise ValueError("Incorrect type for max")
+
+        self.min.setSymbol("o")
+        self.max.setSymbol("x")
+
+        self.min.setSize(10)
+        self.max.setSize(10)
+
+        if isinstance(self.curve, pg.PlotDataItem):
+            self.curve.setCurveClickable(True)
+
+        self.connect_signals()
+
+    def connect_signals(self) -> None:
+        """Connect the click signal to the click handler method."""
+        if isinstance(self.curve, pg.ScatterPlotItem | pg.PlotCurveItem):
+            # Monkey-patch the mouse click event to handle clicks
+            # self.curve.mouseClickEvent = self.on_curve_click
+            self.curve.mouseClickEvent = self.on_curve_click
+        if isinstance(self.curve, pg.PlotDataItem):
+            self.curve.sigClicked.connect(lambda c, event: self.on_curve_click(event))
 
     def __hash__(self) -> int:
         return hash(self.curve)
+
+    def on_curve_click(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() != QtCore.Qt.LeftButton:
+            return
+
+        pos = self.curve.getViewBox().mapSceneToView(event.scenePos())
+        x, y = pos.x(), pos.y()
+
+        if not self.toolbar.is_enabled:
+            return
+
+
+        match self.toolbar.operation:
+            case PointOperation.ADD_MIN:
+                nearest_x, nearest_y = self.find_nearest_point(x, y)
+                if nearest_x is not None and nearest_y is not None:
+                    self.add_point_to_scatter(self.min, nearest_x, nearest_y)
+            case PointOperation.ADD_MAX:
+                nearest_x, nearest_y = self.find_nearest_point(x, y)
+                if nearest_x is not None and nearest_y is not None:
+                    self.add_point_to_scatter(self.max, nearest_x, nearest_y)
+            case PointOperation.REMOVE:
+                if not self.remove_point_from_scatter(self.max, x, y):
+                    self.remove_point_from_scatter(self.min, x, y)
+
+    def find_nearest_point(
+        self, x: float, y: float
+    ) -> tuple[float, float] | tuple[None, None]:
+        """Find the nearest point on the curve to the given coordinates within a threshold."""
+        existing_x, existing_y = self.curve.getData()
+
+        # Convert to numpy arrays for easier manipulation
+        existing_x = np.array(existing_x)
+        existing_y = np.array(existing_y)
+
+        # y_min = np.min(existing_y)
+        # y_max = np.max(existing_y)
+        # normalised_y = (existing_y - y_min) / (y_masé
+
+        distances = existing_x - x
+        # x_distances = np.sqrt((existing_x - x) ** 2 + (existing_y - y) ** 2)
+        min_index = np.argmin(np.abs(distances))
+        min_distance = distances[min_index]
+
+        if min_distance < self.threshold:
+            return existing_x[min_index], existing_y[min_index]
+
+        return None, None
+
+    def add_point_to_scatter(
+        self, scatter: pg.ScatterPlotItem, x: float, y: float
+    ) -> None:
+        """Add a new point to the scatter plot item."""
+        existing_x, existing_y = scatter.getData()
+
+        new_x = list(existing_x) + [x]
+        new_y = list(existing_y) + [y]
+
+        scatter.setData(new_x, new_y)
+
+    def remove_point_from_scatter(
+        self, scatter: pg.ScatterPlotItem, x: float, y: float
+    ) -> bool:
+        """Remove a point close to the clicked location."""
+        existing_x, existing_y = scatter.getData()
+
+        # Convert to numpy arrays for easier manipulation
+        existing_x = np.array(existing_x)
+        existing_y = np.array(existing_y)
+
+        # Calculate distance between click and each point
+        distances = np.sqrt((existing_x - x) ** 2 + (existing_y - y) ** 2)
+
+        # Find the closest point within a threshold distance (e.g., 0.1)
+        # TODO Is the threshold too short ?
+        close_points = distances < self.threshold
+
+        if not np.any(close_points):
+            return False
+
+        # Remove the point(s) that are close
+        new_x = existing_x[~close_points].tolist()
+        new_y = existing_y[~close_points].tolist()
+
+        # Update scatter plot item with the remaining points
+        scatter.setData(new_x, new_y)
+        return True
+
+    def addToPlot(self, plot: pg.PlotWidget | pg.PlotItem) -> None:
+        plot.addItem(self.curve)
+        plot.addItem(self.min)
+        plot.addItem(self.max)
 
     def hide(self) -> None:
         self.curve.hide()
@@ -186,6 +321,7 @@ class CalculationValues:
         self.curve.show()
         self.min.show()
         self.max.show()
+
 
 # TODO Find a way for the dashboard to find their item when deleting
 # 1) Store the item in dashboard ? Or,
@@ -219,12 +355,13 @@ class Panel(QuadrupleAxisPlotItem):
                 return axis_id
 
         return None
+
     def update_y_axis_color(self, item: CalculationValues, color: str) -> None:
         axis_id = self.get_item_axis(item)
         if axis_id:
             axis = self.getAxis(axis_id)
             axis.setPen(pg.mkPen(color=color))
-            
+
             # Manually update the tick labels with the new color
             ticks = axis.tickValues()
             for tick in ticks:
@@ -274,6 +411,7 @@ class Panel(QuadrupleAxisPlotItem):
     def reset(self) -> None:
         for item in self.rotation.inverse.keys():
             self.remove_curve(item)
+
 
 class PanelWidget(QtWidgets.QWidget):
     id: int
@@ -346,8 +484,9 @@ class SoundInformation(pg.GraphicsLayoutWidget):
         self.nextRow()
         self.addItem(self.spectrogram_plot)
 
-        self.spectrogram_plot.getAxis('bottom').setHeight(0)
-        self.spectrogram_plot.getAxis('bottom').hide()
+        self.spectrogram_plot.getAxis("bottom").setHeight(0)
+        self.spectrogram_plot.getAxis("bottom").hide()
+
     def toggle_spectrogram(self, show: bool) -> None:
         if show:
             self.spectrogram_plot.show()
@@ -374,17 +513,18 @@ class SoundInformation(pg.GraphicsLayoutWidget):
     def update_audio_waveform(self, audio_data):
         if audio_data.ndim > 1:
             audio_data = np.mean(audio_data, axis=1)
-        
+
         max_val = np.max(np.abs(audio_data))
         if max_val > 0:
             audio_data = audio_data / max_val
         time_axis = np.arange(len(audio_data)) / 44100.0
-        
+
         self.sound_plot_data_item.setData(time_axis, audio_data)
 
         x_max = time_axis[-1]
         if x_max > self.sound_plot.viewRange()[0][1]:
             self.sound_plot.setXRange(0, x_max, padding=0)
+
 
 class Interval:
     name: str
@@ -394,11 +534,7 @@ class Interval:
     end_line: pg.InfiniteLine
     text_item: pg.TextItem
 
-    def __init__(
-        self,
-        interval: tgt.core.Interval,
-        parent_plot: pg.PlotItem
-    ) -> None:
+    def __init__(self, interval: tgt.core.Interval, parent_plot: pg.PlotItem) -> None:
 
         self.name = interval.text
         self.parent_plot = parent_plot
@@ -416,8 +552,8 @@ class Interval:
         )
 
         mid_time = (interval.start_time + interval.end_time) / 2
-        ymax = max(self.parent_plot.listDataItems()[0].yData) 
-        
+        ymax = max(self.parent_plot.listDataItems()[0].yData)
+
         self.text_item = pg.TextItem(interval.text, anchor=(0.5, 0.5), color="r")
         self.text_item.setPos(mid_time, ymax * 0.9)
         self.text_item.setFont(QtGui.QFont("Arial", 12, QtGui.QFont.Bold))
@@ -434,6 +570,7 @@ class Interval:
 
     def __hash__(self) -> int:
         return hash(self.name)
+
 
 class DisplayInterval:
     audio_widget: SoundInformation

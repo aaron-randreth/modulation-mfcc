@@ -37,6 +37,7 @@ from praat_py_ui.parselmouth_calc import Parselmouth
 from quadruple_axis_plot_item import (
     QuadrupleAxisPlotItem,
     Panel,
+    PointOperation,
     CalculationValues,
     PanelWidget,
     SoundInformation,
@@ -415,11 +416,6 @@ class TierSelection(QtWidgets.QGroupBox):
             btn.deleteLater()
 
 
-class PointOperation(Enum):
-    ADD_MIN = 0
-    ADD_MAX = 1
-    REMOVE = 2
-
 
 class ManualPointManagement(QtWidgets.QToolBar):
     # Define custom signals
@@ -722,14 +718,12 @@ class AmplitudeEnvelope(DataSource):
 
 class Plotter(ABC):
 
+    def __init__(self, toolbar: "ManualPointManagement") -> None:
+        self.toolbar = toolbar
+
     @abstractmethod
     def plot(self, x: np.ndarray, y: np.ndarray) -> CalculationValues:
         pass
-        f_times, _, _, f2_values = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999
-        )
-        return f_times, f2_values
-
 
 class CurvePlotter(Plotter):
 
@@ -739,7 +733,7 @@ class CurvePlotter(Plotter):
         min = pg.ScatterPlotItem()
         max = pg.ScatterPlotItem()
 
-        return CalculationValues(curve, min, max)
+        return CalculationValues(curve, min, max, self.toolbar)
 
 
 class ScatterPlotPlotter(Plotter):
@@ -750,7 +744,7 @@ class ScatterPlotPlotter(Plotter):
         min = pg.ScatterPlotItem()
         max = pg.ScatterPlotItem()
 
-        return CalculationValues(curve, min, max)
+        return CalculationValues(curve, min, max, self.toolbar)
 
 
 class CurveGenerator:
@@ -758,7 +752,8 @@ class CurveGenerator:
     derivations: list[Transformation]
     plotters: list[Plotter]
 
-    def __init__(self) -> None:
+    def __init__(self, toolbar : "ManualPointManagement") -> None:
+        self.toolbar = toolbar
         self.datasources = [
             None,
             Mfcc(),
@@ -771,12 +766,11 @@ class CurveGenerator:
         self.derivations = [Trajectory(), Velocity(), Acceleration()]
         self.plotters = [
             None,
-            CurvePlotter(),
-            ScatterPlotPlotter(),
-            ScatterPlotPlotter(),
-            ScatterPlotPlotter(),
-            CurvePlotter(),
-            CurvePlotter(),
+            CurvePlotter(self.toolbar),
+            ScatterPlotPlotter(self.toolbar),
+            ScatterPlotPlotter(self.toolbar),
+            ScatterPlotPlotter(self.toolbar),
+            CurvePlotter(self.toolbar)
         ]
 
     def generate(
@@ -835,7 +829,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = ScatterPlotPlotter()
+        plotter = ScatterPlotPlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def generate_custom_formant3(
@@ -864,7 +858,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = ScatterPlotPlotter()
+        plotter = ScatterPlotPlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def generate_custom_formant1(
@@ -893,7 +887,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = ScatterPlotPlotter()
+        plotter = ScatterPlotPlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def generate_custom_mfcc(
@@ -927,7 +921,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = CurvePlotter()
+        plotter = CurvePlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def generate_custom_amplitude(
@@ -958,7 +952,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = CurvePlotter()
+        plotter = CurvePlotter(self.toolbar)
         return plotter.plot(time_axis, amplitude)
 
     def generate_custom_f0(
@@ -993,7 +987,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = CurvePlotter()
+        plotter = CurvePlotter(self.toolbar)
         return plotter.plot(x, y)
 
 
@@ -1021,9 +1015,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_data = None
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
-        self.curve_generator = CurveGenerator()
-        self.dashboard_widget = DashboardWidget(self.custom_curves)
         self.point_management_toolbar = ManualPointManagement(nb_panels)
+        self.curve_generator = CurveGenerator(self.point_management_toolbar)
+        self.dashboard_widget = DashboardWidget(self.custom_curves)
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -1056,7 +1050,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_control_widget(self.annotation_indicator)
         self.add_control_widget(self.create_load_buttons())
         self.add_control_widget(self.create_audio_control_buttons())
-        self.add_control_widget(self.create_spectrogram_checkbox())
+        # self.add_control_widget(self.create_spectrogram_checkbox())
         self.add_control_widget(self.tier_selection)
         self.add_control_widget(self.dashboard_widget)
         self.add_control_widget(self.config_mfcc_button)
@@ -1084,10 +1078,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # self.add_control_widget(self.create_analysis_controls())
         self.add_control_widget(self.point_management_toolbar)
-        self.point_management_toolbar.analyze_max_button.clicked.connect(
+        self.point_management_toolbar.min_analysis_clicked.connect(
             self.analyze_max_peaks
         )
-        self.point_management_toolbar.analyze_min_button.clicked.connect(
+        self.point_management_toolbar.max_analysis_clicked.connect(
             self.analyze_min_peaks
         )
         self.point_management_toolbar.export_to_csv_clicked.connect(self.export_to_csv)
@@ -1186,7 +1180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         operation = self.curve_generator.derivations[derivation_id]
         x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
 
-        plotter = CurvePlotter()
+        plotter = CurvePlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def add_curve_widget(self, widget: QtWidgets.QWidget) -> None:
