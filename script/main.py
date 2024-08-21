@@ -1,20 +1,28 @@
 import os
 import sys
-import numpy as np
-from pydub.playback import play
+
 from abc import ABC, abstractmethod
 from typing import override
+
 import threading
-from PyQt5 import QtWidgets, QtCore, QtGui
-import pyqtgraph as pg
+import wave
+import time
+import csv
+
+import numpy as np
+import sounddevice as sd
+from scipy.io import wavfile
+from scipy.signal import find_peaks
+from pydub.playback import play
 from pydub import AudioSegment
+
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QFileDialog
+
+import pyqtgraph as pg
 import parselmouth
 import tgt
-import sounddevice as sd
-import wave
-from PyQt5.QtWidgets import QFileDialog
-import time
-from scipy.io import wavfile
+
 from config_dialog import UnifiedConfigDialog
 from mfcc import load_channel, get_MFCCS_change
 from calc import (
@@ -34,9 +42,6 @@ from quadruple_axis_plot_item import (
     SoundInformation,
     DisplayInterval,
 )
-import csv
-
-from scipy.signal import find_peaks
 
 
 class POSChannelSelectionDialog(QtWidgets.QDialog):
