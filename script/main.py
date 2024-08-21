@@ -415,6 +415,82 @@ class TierSelection(QtWidgets.QGroupBox):
             btn.deleteLater()
 
 
+class PointOperation(Enum):
+    ADD_MIN = 0
+    ADD_MAX = 1
+    REMOVE = 2
+
+
+class ManualPointManagement(QtWidgets.QToolBar):
+    # Define custom signals
+    panel_changed: QtCore.pyqtSignal = QtCore.pyqtSignal(int)
+    checkbox_toggled: QtCore.pyqtSignal = QtCore.pyqtSignal(bool)
+    operation_changed: QtCore.pyqtSignal = QtCore.pyqtSignal(int)
+    min_analysis_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
+    max_analysis_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
+    export_to_csv_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
+
+    def __init__(
+        self, panel_nb: int = 4, parent: QtWidgets.QWidget | None = None
+    ) -> None:
+        super().__init__(parent)
+
+        self.panel_nb = panel_nb
+
+        self.panel_selector: QtWidgets.QComboBox = QtWidgets.QComboBox(self)
+        self.add_min_action: QtWidgets.QAction = QtWidgets.QAction("Add Min", self)
+        self.add_max_action: QtWidgets.QAction = QtWidgets.QAction("Add Max", self)
+        self.export_to_csv_action: QtWidgets.QAction = QtWidgets.QAction(
+            "Export to CSV", self
+        )
+
+        self.enable_checkbox: QtWidgets.QCheckBox = QtWidgets.QCheckBox(
+            "Gestion manuelle", self
+        )
+        self.operation_selector: QtWidgets.QComboBox = QtWidgets.QComboBox(self)
+
+        self.panel_selector.addItems([f"Panel {i+1}" for i in range(self.panel_nb)])
+        self.operation_selector.addItem("Add min", PointOperation.ADD_MIN)
+        self.operation_selector.addItem("Add max", PointOperation.ADD_MAX)
+        self.operation_selector.addItem("Remove point", PointOperation.REMOVE)
+
+        self.panel_selector.currentIndexChanged.connect(self.on_panel_changed)
+        self.add_min_action.triggered.connect(self.on_add_min_clicked)
+        self.add_max_action.triggered.connect(self.on_add_max_clicked)
+        self.export_to_csv_action.triggered.connect(self.on_export_to_csv_clicked)
+
+        self.addWidget(self.enable_checkbox)
+        self.addWidget(self.operation_selector)
+        self.addSeparator()
+        self.addWidget(self.panel_selector)
+        self.addAction(self.add_min_action)
+        self.addAction(self.add_max_action)
+        self.addAction(self.export_to_csv_action)
+
+    def on_panel_changed(self, index: int) -> None:
+        self.panel_changed.emit(index)
+
+    def on_add_min_clicked(self) -> None:
+        self.min_analysis_clicked.emit()
+
+    def on_add_max_clicked(self) -> None:
+        self.max_analysis_clicked.emit()
+
+    def on_export_to_csv_clicked(self) -> None:
+        self.export_to_csv_clicked.emit()
+
+    @property
+    def is_enabled(self) -> bool:
+        return self.enable_checkbox.isChecked()
+
+    @property
+    def operation(self) -> PointOperation:
+        return self.operation_selector.currentData()
+
+    @property
+    def panel(self) -> int:
+        return self.panel_selector.currentIndex()
+
 class DataSource(ABC):
     """
     Defines the interface for the curve data calculation.
@@ -934,6 +1010,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
+        nb_panels = 4
+
         self.init_main_layout()
         self.custom_curves = {}
         self.audio_path = None
@@ -945,6 +1023,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.curve_generator = CurveGenerator()
         self.dashboard_widget = DashboardWidget(self.custom_curves)
+        self.point_management_toolbar = ManualPointManagement(nb_panels)
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
 
         self.audio_indicator = FileLoadIndicator(
@@ -981,7 +1060,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_control_widget(self.tier_selection)
         self.add_control_widget(self.dashboard_widget)
         self.add_control_widget(self.config_mfcc_button)
-        self.add_control_widget(self.zoom)
 
         self.add_curve_widget(self.audio_widget)
 
@@ -993,7 +1071,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.custom_formant2_params = {}
         self.custom_formant3_params = {}
         self.custom_f0_params = {}
-        for i in range(4):
+
+        for i in range(nb_panels):
             panel_widget = PanelWidget(i + 1)
 
             self.zoom.link_viewbox(panel_widget.panel)
@@ -1001,7 +1080,18 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_curve_widget(panel_widget)
             self.panels.append(panel_widget)
 
-        self.add_control_widget(self.create_analysis_controls())
+        self.add_curve_widget(self.zoom)
+
+        # self.add_control_widget(self.create_analysis_controls())
+        self.add_control_widget(self.point_management_toolbar)
+        self.point_management_toolbar.analyze_max_button.clicked.connect(
+            self.analyze_max_peaks
+        )
+        self.point_management_toolbar.analyze_min_button.clicked.connect(
+            self.analyze_min_peaks
+        )
+        self.point_management_toolbar.export_to_csv_clicked.connect(self.export_to_csv)
+
         self.recording = False
         self.frames = []
         self.recorded_audio = []
@@ -1153,7 +1243,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return analysis_controls_widget
 
     def export_to_csv(self):
-        panel_id = self.panel_selector.currentIndex()
+        panel_id = self.point_management_toolbar.panel
         if panel_id < 0:
             return
 
@@ -1290,7 +1380,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
     def analyze_max_peaks(self) -> None:
-        panel_id = self.panel_selector.currentIndex()
+        panel_id = self.point_management_toolbar.panel
         if panel_id < 0:
             return
 
@@ -1336,7 +1426,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
     def analyze_min_peaks(self) -> None:
-        panel_id = self.panel_selector.currentIndex()
+        panel_id = self.point_management_toolbar.panel
         if panel_id < 0:
             return
 
