@@ -8,3 +8,5 @@ praat-parselmouth
 tgt
 bidict
 findiff
+sounddevice
+pydub
