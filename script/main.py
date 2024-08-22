@@ -487,8 +487,8 @@ class ManualPointManagement(QtWidgets.QToolBar):
         self.panel_nb = panel_nb
 
         self.panel_selector: QtWidgets.QComboBox = QtWidgets.QComboBox(self)
-        self.add_min_action: QtWidgets.QAction = QtWidgets.QAction("Analyze Max", self)
-        self.add_max_action: QtWidgets.QAction = QtWidgets.QAction("Analyze Min", self)
+        self.add_min_action: QtWidgets.QAction = QtWidgets.QAction("Analyze Min", self)
+        self.add_max_action: QtWidgets.QAction = QtWidgets.QAction("Analyze Max", self)
         self.export_to_csv_action: QtWidgets.QAction = QtWidgets.QAction(
             "Export to CSV", self
         )
@@ -1326,17 +1326,10 @@ class MainWindow(QtWidgets.QMainWindow):
             for axis_id, options in selected_data.items():
                 axis = panel.rotation[axis_id]
 
-                # Récupération des données de courbe (x et y)
-                if isinstance(axis.curve, pg.PlotDataItem):
-                    x_data = axis.curve.xData
-                    y_data = axis.curve.yData
-                elif isinstance(axis.curve, pg.ScatterPlotItem):
-                    x_data = np.array([p.pos().x() for p in axis.curve.points()])
-                    y_data = np.array([p.pos().y() for p in axis.curve.points()])
-                else:
-                    continue
+                # Récupération des données de courbe (x et y) si sélectionnées
+                x_data, y_data = axis.curve.getData() if axis.curve is not None else ([], [])
 
-                # Mise à jour des en-têtes en fonction de l'axe
+                # Ajouter des en-têtes uniques pour les colonnes X et Y
                 if options["x"]:
                     headers.append(f"Curve {axis_id} X")
                 if options["y"]:
@@ -1344,49 +1337,40 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # Remplissage des données CSV pour chaque point de la courbe
                 for i, x in enumerate(x_data):
-                    if x not in csv_data:
-                        csv_data[x] = {}
+                    if i not in csv_data:
+                        csv_data[i] = {}
 
                     if options["x"]:
-                        csv_data[x][f"Curve {axis_id} X"] = x
+                        csv_data[i][f"Curve {axis_id} X"] = x
                     if options["y"]:
-                        csv_data[x][f"Curve {axis_id} Y"] = y_data[i]
+                        csv_data[i][f"Curve {axis_id} Y"] = y_data[i]
 
-                # Gestion des pics minimums et maximums manuels
-                min_peaks = axis.min_peaks if hasattr(axis, "min_peaks") else []
-                manual_min_peaks = axis.manual_min_points if hasattr(axis, "manual_min_points") else []
+                # Gestion des pics minimums si sélectionnés, avec des en-têtes indépendants
+                if options["min"]:
+                    min_peaks = [(p.pos().x(), p.pos().y()) for p in axis.min.points()]
+                    headers.extend([f"Min Peak {axis_id} X", f"Min Peak {axis_id} Y"])
+                    for i, (x, y) in enumerate(min_peaks):
+                        if i not in csv_data:
+                            csv_data[i] = {}
+                        csv_data[i][f"Min Peak {axis_id} X"] = x
+                        csv_data[i][f"Min Peak {axis_id} Y"] = y
 
-                max_peaks = axis.max_peaks if hasattr(axis, "max_peaks") else []
-                manual_max_peaks = axis.manual_max_points if hasattr(axis, "manual_max_points") else []
-
-                # Ajout des pics minimums
-                if min_peaks or manual_min_peaks:
-                    if f"Min Peak {axis_id} X" not in headers:
-                        headers.extend([f"Min Peak {axis_id} X", f"Min Peak {axis_id} Y"])
-                    for x, y in min_peaks + manual_min_peaks:
-                        if x not in csv_data:
-                            csv_data[x] = {}
-                        csv_data[x][f"Min Peak {axis_id} X"] = x
-                        csv_data[x][f"Min Peak {axis_id} Y"] = y
-
-                # Ajout des pics maximums
-                if max_peaks or manual_max_peaks:
-                    if f"Max Peak {axis_id} X" not in headers:
-                        headers.extend([f"Max Peak {axis_id} X", f"Max Peak {axis_id} Y"])
-                    for x, y in max_peaks + manual_max_peaks:
-                        if x not in csv_data:
-                            csv_data[x] = {}
-                        csv_data[x][f"Max Peak {axis_id} X"] = x
-                        csv_data[x][f"Max Peak {axis_id} Y"] = y
+                # Gestion des pics maximums si sélectionnés, avec des en-têtes indépendants
+                if options["max"]:
+                    max_peaks = [(p.pos().x(), p.pos().y()) for p in axis.max.points()]
+                    headers.extend([f"Max Peak {axis_id} X", f"Max Peak {axis_id} Y"])
+                    for i, (x, y) in enumerate(max_peaks):
+                        if i not in csv_data:
+                            csv_data[i] = {}
+                        csv_data[i][f"Max Peak {axis_id} X"] = x
+                        csv_data[i][f"Max Peak {axis_id} Y"] = y
 
             # Écriture des en-têtes dans le fichier CSV
             writer.writerow(headers)
 
-            # Écriture des données dans le fichier CSV triées par les valeurs x
-            for x in sorted(csv_data.keys()):
-                row = []
-                for header in headers:
-                    row.append(csv_data[x].get(header, None))  # Remplit seulement les colonnes pertinentes
+            # Écriture des données dans le fichier CSV
+            for i in sorted(csv_data.keys()):
+                row = [csv_data[i].get(header, "") for header in headers]
                 writer.writerow(row)
 
         QtWidgets.QMessageBox.information(
@@ -1394,6 +1378,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "Export Successful",
             f"Data has been successfully exported to {csv_path}",
         )
+
 
     def analyze_max_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
