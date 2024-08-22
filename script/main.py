@@ -478,7 +478,6 @@ class ManualPointManagement(QtWidgets.QToolBar):
     min_analysis_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
     max_analysis_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
     export_to_csv_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
-    remove_point_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()  # New Signal for removing points
 
     def __init__(
         self, panel_nb: int = 4, parent: QtWidgets.QWidget | None = None
@@ -516,10 +515,6 @@ class ManualPointManagement(QtWidgets.QToolBar):
         self.addAction(self.add_min_action)
         self.addAction(self.add_max_action)
         self.addAction(self.export_to_csv_action)
-
-    def on_remove_point_clicked(self) -> None:
-        self.remove_point_clicked.emit()  # Emit the signal when remove is clicked
-
 
     def on_panel_changed(self, index: int) -> None:
         self.panel_changed.emit(index)
@@ -1081,7 +1076,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
         self.point_management_toolbar = ManualPointManagement(nb_panels)
-        self.point_management_toolbar.remove_point_clicked.connect(self.remove_selected_point)  # Connect to the new method
         self.curve_generator = CurveGenerator(self.point_management_toolbar)
         self.dashboard_widget = DashboardWidget(self.custom_curves)
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
@@ -1145,10 +1139,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.add_control_widget(self.create_analysis_controls())
         self.add_control_widget(self.point_management_toolbar)
         self.point_management_toolbar.min_analysis_clicked.connect(
-            self.analyze_max_peaks
+            self.analyze_min_peaks
         )
         self.point_management_toolbar.max_analysis_clicked.connect(
-            self.analyze_min_peaks
+            self.analyze_max_peaks
         )
         self.point_management_toolbar.export_to_csv_clicked.connect(self.export_to_csv)
 
@@ -1204,48 +1198,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         load_group_box.setLayout(load_layout)
         return load_group_box
-    def analyze_min_peaks(self) -> None:
-        panel_id = self.point_management_toolbar.panel
-        if panel_id < 0:
-            return
-
-        panel = self.panels[panel_id].panel
-
-        region = self.audio_widget.selection_region.getRegion()
-        region_start, region_end = region
-
-        for axis_id, axis in panel.rotation.items():
-            curve = axis.curve
-            if isinstance(curve, pg.PlotDataItem):
-                x_data = curve.xData
-                y_data = curve.yData
-            elif isinstance(curve, pg.ScatterPlotItem):
-                x_data = np.array([p.pos().x() for p in curve.points()])
-                y_data = np.array([p.pos().y() for p in curve.points()])
-            else:
-                continue
-
-            region_mask = (x_data >= region_start) & (x_data <= region_end)
-            x_data_region = x_data[region_mask]
-            y_data_region = y_data[region_mask]
-            peaks, _ = find_peaks(-y_data_region)
-
-            peak_x = x_data_region[peaks]
-            peak_y = y_data_region[peaks]
-            minima_plot = pg.ScatterPlotItem(
-                x=peak_x, y=peak_y, pen=pg.mkPen("b"), brush=pg.mkBrush(0, 0, 255, 150), size=10
-            )
-
-            # Connect the signal to detect when a peak is clicked
-            minima_plot.sigClicked.connect(lambda plot, points: self.handle_point_click(plot, points, axis_id, panel_id, "min"))
-
-            # Store the reference of the minima plot and points in axis
-            axis.min_peaks_plot = minima_plot  # Store the entire ScatterPlotItem
-            axis.min_peaks = list(zip(peak_x, peak_y))
-
-            panel.add_item(axis_id, minima_plot)
-            self.selected_min_peaks[(panel_id, axis_id)] = []  # Initialize selection list for min peaks
-
 
     def load_pos_file(self) -> None:
         pos_path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -1345,6 +1297,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.export_csv_button)
         analysis_controls_widget.setLayout(layout)
         return analysis_controls_widget
+
     def export_to_csv(self):
         # Récupère les identifiants d'axes sélectionnés pour l'exportation
         axis_ids = list(self.panels[self.point_management_toolbar.panel].panel.rotation.keys())
@@ -1442,7 +1395,6 @@ class MainWindow(QtWidgets.QMainWindow):
             f"Data has been successfully exported to {csv_path}",
         )
 
-
     def analyze_max_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
         if panel_id < 0:
@@ -1453,158 +1405,73 @@ class MainWindow(QtWidgets.QMainWindow):
         region = self.audio_widget.selection_region.getRegion()
         region_start, region_end = region
 
-        for axis_id, axis in panel.rotation.items():
-            curve = axis.curve
-            if isinstance(curve, pg.PlotDataItem):
-                x_data = curve.xData
-                y_data = curve.yData
-            elif isinstance(curve, pg.ScatterPlotItem):
-                x_data = np.array([p.pos().x() for p in curve.points()])
-                y_data = np.array([p.pos().y() for p in curve.points()])
-            else:
-                continue
+        for axis_id, item in panel.rotation.items():
+            calculated_curve: CalculationValues = item
+
+            x_data, y_data = calculated_curve.curve.getData()
 
             region_mask = (x_data >= region_start) & (x_data <= region_end)
+
             x_data_region = x_data[region_mask]
             y_data_region = y_data[region_mask]
 
             peaks, _ = find_peaks(y_data_region)
+
             peak_x = x_data_region[peaks]
             peak_y = y_data_region[peaks]
-            peaks_plot = pg.ScatterPlotItem(
-                x=peak_x, y=peak_y, pen=pg.mkPen("r"), brush=pg.mkBrush(255, 0, 0, 150), size=10
+
+            calculated_curve.max.setData(peak_x, peak_y)
+
+            peak_info = "\n".join(
+                [
+                    f"Peak {i + 1}: X = {px}, Y = {py}"
+                    for i, (px, py) in enumerate(zip(peak_x, peak_y))
+                ]
+            )
+            QtWidgets.QMessageBox.information(
+                self,
+                "Peak Analysis",
+                f"Peaks in Panel {panel_id + 1} (Selected Region):\n\n{peak_info}",
             )
 
-            # Connect the signal to detect when a peak is clicked
-            peaks_plot.sigClicked.connect(lambda plot, points: self.handle_point_click(plot, points, axis_id, panel_id, "max"))
-
-            # Store the reference of the peaks plot and points in axis
-            axis.max_peaks_plot = peaks_plot  # Store the entire ScatterPlotItem
-            axis.max_peaks = list(zip(peak_x, peak_y))
-
-            panel.add_item(axis_id, peaks_plot)
-            self.selected_max_peaks[(panel_id, axis_id)] = []  # Initialize selection list
-    def handle_point_click(self, plot, points, axis_id, panel_id, peak_type):
-        tolerance = 0.01  # Set a small tolerance for detecting the nearest point
-        
-        for point in points:
-            clicked_x, clicked_y = point.pos().x(), point.pos().y()
-
-            # Handle automatic max points
-            if peak_type == "max" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'max_peaks'):
-                self.panels[panel_id].panel.rotation[axis_id].max_peaks = [
-                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].max_peaks
-                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
-                ]
-
-            # Handle manual max points
-            if peak_type == "max" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'manual_max_points'):
-                self.panels[panel_id].panel.rotation[axis_id].manual_max_points = [
-                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].manual_max_points
-                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
-                ]
-
-            # Handle automatic min points
-            if peak_type == "min" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'min_peaks'):
-                self.panels[panel_id].panel.rotation[axis_id].min_peaks = [
-                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].min_peaks
-                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
-                ]
-
-            # Handle manual min points
-            if peak_type == "min" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'manual_min_points'):
-                self.panels[panel_id].panel.rotation[axis_id].manual_min_points = [
-                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].manual_min_points
-                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
-                ]
-
-            # Refresh the plot by removing the clicked point
-            remaining_points = [
-                (px, py) for px, py in zip(plot.data['x'], plot.data['y'])
-                if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
-            ]
-
-            if remaining_points:
-                remaining_x, remaining_y = zip(*remaining_points)
-            else:
-                remaining_x, remaining_y = [], []
-
-            plot.setData(x=remaining_x, y=remaining_y)
-
-    def remove_selected_point(self) -> None:
+    def analyze_min_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
         if panel_id < 0:
             return
 
         panel = self.panels[panel_id].panel
 
-        # Loop through each axis and check for selected points to remove
-        for axis_id, axis in panel.rotation.items():
-            # Remove selected max peaks (automatic and manual)
-            if (panel_id, axis_id) in self.selected_max_peaks:
-                if hasattr(axis, 'max_peaks_plot') and axis.max_peaks_plot is not None:
-                    selected_points = self.selected_max_peaks[(panel_id, axis_id)]
+        region = self.audio_widget.selection_region.getRegion()
+        region_start, region_end = region
 
-                    # Collect remaining points (those that are not selected)
-                    remaining_points = [
-                        (x, y) for x, y in zip(axis.max_peaks_plot.data['x'], axis.max_peaks_plot.data['y'])
-                        if (x, y) not in [(p.pos().x(), p.pos().y()) for p in selected_points]
-                    ]
+        for axis_id, item in panel.rotation.items():
+            calculated_curve: CalculationValues = item
 
-                    if remaining_points:
-                        # Separate x and y for remaining points
-                        remaining_x, remaining_y = zip(*remaining_points)
-                    else:
-                        remaining_x, remaining_y = [], []
+            x_data, y_data = calculated_curve.curve.getData()
 
-                    # Update the ScatterPlotItem with the remaining points
-                    axis.max_peaks_plot.setData(x=remaining_x, y=remaining_y)
+            region_mask = (x_data >= region_start) & (x_data <= region_end)
 
-                    # Clear the selection
-                    self.selected_max_peaks[(panel_id, axis_id)] = []
+            x_data_region = x_data[region_mask]
+            y_data_region = y_data[region_mask]
 
-                # Remove manual max peaks
-                if hasattr(axis, 'manual_max_points'):
-                    axis.manual_max_points = [
-                        point for point in axis.manual_max_points if point not in self.selected_max_peaks[(panel_id, axis_id)]
-                    ]
-            
-            # Remove selected min peaks (automatic and manual)
-            if (panel_id, axis_id) in self.selected_min_peaks:
-                if hasattr(axis, 'min_peaks_plot') and axis.min_peaks_plot is not None:
-                    selected_points = self.selected_min_peaks[(panel_id, axis_id)]
+            peaks, _ = find_peaks(-y_data_region)
 
-                    # Collect remaining points (those that are not selected)
-                    remaining_points = [
-                        (x, y) for x, y in zip(axis.min_peaks_plot.data['x'], axis.min_peaks_plot.data['y'])
-                        if (x, y) not in [(p.pos().x(), p.pos().y()) for p in selected_points]
-                    ]
+            peak_x = x_data_region[peaks]
+            peak_y = y_data_region[peaks]
 
-                    if remaining_points:
-                        # Separate x and y for remaining points
-                        remaining_x, remaining_y = zip(*remaining_points)
-                    else:
-                        remaining_x, remaining_y = [], []
+            calculated_curve.min.setData(peak_x, peak_y)
 
-                    # Update the ScatterPlotItem with the remaining points
-                    axis.min_peaks_plot.setData(x=remaining_x, y=remaining_y)
-
-                    # Clear the selection
-                    self.selected_min_peaks[(panel_id, axis_id)] = []
-
-                # Remove manual min peaks
-                if hasattr(axis, 'manual_min_points'):
-                    axis.manual_min_points = [
-                        point for point in axis.manual_min_points if point not in self.selected_min_peaks[(panel_id, axis_id)]
-                    ]
-
-            # Refresh the panel
-            panel.update()
-
-        QtWidgets.QMessageBox.information(
-            self, "Point Removed", f"Selected points have been removed from Panel {panel_id + 1}."
-        )
-
+            min_info = "\n".join(
+                [
+                    f"Minimum {i + 1}: X = {px}, Y = {py}"
+                    for i, (px, py) in enumerate(zip(peak_x, peak_y))
+                ]
+            )
+            QtWidgets.QMessageBox.information(
+                self,
+                "Minimum Peak Analysis",
+                f"Minima in Panel {panel_id + 1} (Selected Region):\n\n{min_info}",
+            )
 
     def create_spectrogram_checkbox(self) -> QtWidgets.QGroupBox:
         spectrogram_group_box = QtWidgets.QGroupBox("Select Spectrogram")

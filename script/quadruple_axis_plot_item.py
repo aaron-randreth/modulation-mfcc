@@ -217,6 +217,11 @@ class CalculationValues:
         if isinstance(self.curve, pg.PlotDataItem):
             self.curve.sigClicked.connect(lambda c, event: self.on_curve_click(event))
 
+        remove = lambda scatter, points, _: self.remove_points_from_scatter(scatter, points)
+
+        self.min.sigClicked.connect(remove)
+        self.max.sigClicked.connect(remove)
+
     def __hash__(self) -> int:
         return hash(self.curve)
 
@@ -230,19 +235,28 @@ class CalculationValues:
         if not self.toolbar.is_enabled:
             return
 
+        if self.toolbar.operation is PointOperation.REMOVE:
+            return
+
+        nearest_x, nearest_y = self.find_nearest_point(x, y)
+
+        if nearest_x is None or nearest_y is None:
+            return
+
+        point_type: ScatterPlotItem | None = None
 
         match self.toolbar.operation:
             case PointOperation.ADD_MIN:
-                nearest_x, nearest_y = self.find_nearest_point(x, y)
-                if nearest_x is not None and nearest_y is not None:
-                    self.add_point_to_scatter(self.min, nearest_x, nearest_y)
+                point_type = self.min
             case PointOperation.ADD_MAX:
-                nearest_x, nearest_y = self.find_nearest_point(x, y)
-                if nearest_x is not None and nearest_y is not None:
-                    self.add_point_to_scatter(self.max, nearest_x, nearest_y)
-            case PointOperation.REMOVE:
-                if not self.remove_point_from_scatter(self.max, x, y):
-                    self.remove_point_from_scatter(self.min, x, y)
+                point_type = self.max
+            case _:
+                return
+
+        if point_type is None:
+            return
+
+        self.add_point_to_scatter(point_type, nearest_x, nearest_y)
 
     def find_nearest_point(
         self, x: float, y: float
@@ -254,12 +268,8 @@ class CalculationValues:
         existing_x = np.array(existing_x)
         existing_y = np.array(existing_y)
 
-        # y_min = np.min(existing_y)
-        # y_max = np.max(existing_y)
-        # normalised_y = (existing_y - y_min) / (y_masé
-
         distances = existing_x - x
-        # x_distances = np.sqrt((existing_x - x) ** 2 + (existing_y - y) ** 2)
+        # distances = np.sqrt((existing_x - x) ** 2 + (existing_y - y) ** 2)
         min_index = np.argmin(np.abs(distances))
         min_distance = distances[min_index]
 
@@ -279,33 +289,14 @@ class CalculationValues:
 
         scatter.setData(new_x, new_y)
 
-    def remove_point_from_scatter(
-        self, scatter: pg.ScatterPlotItem, x: float, y: float
-    ) -> bool:
-        """Remove a point close to the clicked location."""
+    def remove_points_from_scatter(self, scatter: pg.ScatterPlotItem, points: list[pg.SpotItem]) -> None:
         existing_x, existing_y = scatter.getData()
-
-        # Convert to numpy arrays for easier manipulation
-        existing_x = np.array(existing_x)
-        existing_y = np.array(existing_y)
-
-        # Calculate distance between click and each point
-        distances = np.sqrt((existing_x - x) ** 2 + (existing_y - y) ** 2)
-
-        # Find the closest point within a threshold distance (e.g., 0.1)
-        # TODO Is the threshold too short ?
-        close_points = distances < self.threshold
-
-        if not np.any(close_points):
-            return False
-
-        # Remove the point(s) that are close
-        new_x = existing_x[~close_points].tolist()
-        new_y = existing_y[~close_points].tolist()
-
-        # Update scatter plot item with the remaining points
-        scatter.setData(new_x, new_y)
-        return True
+        for point in points:
+            pos = point.pos()
+            x, y = pos.x(), pos.y()
+            mask = ~((np.isclose(existing_x, x)) & (np.isclose(existing_y, y)))
+            existing_x, existing_y = existing_x[mask], existing_y[mask]
+        scatter.setData(existing_x, existing_y)
 
     def addToPlot(self, plot: pg.PlotWidget | pg.PlotItem) -> None:
         plot.addItem(self.curve)
