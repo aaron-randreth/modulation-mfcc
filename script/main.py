@@ -43,7 +43,7 @@ from quadruple_axis_plot_item import (
 )
 
 class ExportCSVDialog(QtWidgets.QDialog):
-    def __init__(self, axis_ids, parent=None):
+    def __init__(self, axis_ids, curve_names, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select Data to Export")
 
@@ -52,8 +52,9 @@ class ExportCSVDialog(QtWidgets.QDialog):
         # Store selections in a dictionary
         self.selections = {}
 
-        for axis_id in axis_ids:
-            group_box = QtWidgets.QGroupBox(f"Curve {axis_id} Data")
+        # Use curve_names instead of axis_ids to label the group boxes
+        for axis_id, curve_name in zip(axis_ids, curve_names):
+            group_box = QtWidgets.QGroupBox(f"Curve {curve_name} Data")
             group_layout = QtWidgets.QFormLayout()
 
             x_checkbox = QtWidgets.QCheckBox("Include X values")
@@ -71,7 +72,7 @@ class ExportCSVDialog(QtWidgets.QDialog):
             layout.addWidget(group_box)
 
             # Store checkboxes in selections dictionary
-            self.selections[axis_id] = {
+            self.selections[curve_name] = {
                 "x": x_checkbox,
                 "y": y_checkbox,
                 "min": min_checkbox,
@@ -86,8 +87,8 @@ class ExportCSVDialog(QtWidgets.QDialog):
 
     def get_selections(self):
         selections = {}
-        for axis_id, options in self.selections.items():
-            selections[axis_id] = {
+        for curve_name, options in self.selections.items():
+            selections[curve_name] = {
                 "x": options["x"].isChecked(),
                 "y": options["y"].isChecked(),
                 "min": options["min"].isChecked(),
@@ -1300,9 +1301,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def export_to_csv(self):
         # Récupère les identifiants d'axes sélectionnés pour l'exportation
-        axis_ids = list(self.panels[self.point_management_toolbar.panel].panel.rotation.keys())
+        panel = self.panels[self.point_management_toolbar.panel].panel
+
+        # Récupère tous les identifiants d'axes (en tant que clés) dans panel.rotation
+        axis_ids = list(panel.rotation.keys())
+
+        # Crée une liste pour stocker les noms des courbes associés aux identifiants d'axes
+        curve_names = []
+
+        # Parcourt tous les items du tableau de bord pour trouver les noms des courbes
+        for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
+            item = self.dashboard_widget.dashboard.topLevelItem(i)
+            curve_name = item._curve_type.currentText()
+
+            # On associe chaque item (basé sur son index i) à une courbe dans panel.rotation
+            if i < len(axis_ids):
+                curve_names.append(curve_name)
+
+        # Passe les noms des courbes dans la boîte de dialogue ExportCSVDialog
+        dialog = ExportCSVDialog(axis_ids, curve_names, self)
         
-        dialog = ExportCSVDialog(axis_ids, self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             selected_data = dialog.get_selections()
 
@@ -1312,28 +1330,35 @@ class MainWindow(QtWidgets.QMainWindow):
 
             if not csv_path:
                 return  # Quitte si l'utilisateur annule la sauvegarde
-            
-            panel = self.panels[self.point_management_toolbar.panel].panel
-            self.save_curves_to_csv(panel, selected_data, csv_path)
-    def save_curves_to_csv(self, panel, selected_data, csv_path):
+
+            self.save_curves_to_csv(panel, selected_data, csv_path, axis_ids, curve_names)
+
+
+    def save_curves_to_csv(self, panel, selected_data, csv_path, axis_ids, curve_names):
         with open(csv_path, mode="w", newline="") as file:
             writer = csv.writer(file)
 
             headers = []
             csv_data = {}
 
-            # Pour chaque axe sélectionné et ses options
-            for axis_id, options in selected_data.items():
+            # Pour chaque identifiant d'axe et ses options
+            for idx, axis_id in enumerate(axis_ids):
+                curve_name = curve_names[idx]
+
+                if curve_name not in selected_data:
+                    continue
+
+                options = selected_data[curve_name]
                 axis = panel.rotation[axis_id]
 
                 # Récupération des données de courbe (x et y) si sélectionnées
                 x_data, y_data = axis.curve.getData() if axis.curve is not None else ([], [])
 
-                # Ajouter des en-têtes uniques pour les colonnes X et Y
+                # Ajouter des en-têtes uniques pour les colonnes X et Y avec le nom de la courbe
                 if options["x"]:
-                    headers.append(f"Curve {axis_id} X")
+                    headers.append(f"{curve_name} X")
                 if options["y"]:
-                    headers.append(f"Curve {axis_id} Y")
+                    headers.append(f"{curve_name} Y")
 
                 # Remplissage des données CSV pour chaque point de la courbe
                 for i, x in enumerate(x_data):
@@ -1341,29 +1366,29 @@ class MainWindow(QtWidgets.QMainWindow):
                         csv_data[i] = {}
 
                     if options["x"]:
-                        csv_data[i][f"Curve {axis_id} X"] = x
+                        csv_data[i][f"{curve_name} X"] = x
                     if options["y"]:
-                        csv_data[i][f"Curve {axis_id} Y"] = y_data[i]
+                        csv_data[i][f"{curve_name} Y"] = y_data[i]
 
                 # Gestion des pics minimums si sélectionnés, avec des en-têtes indépendants
                 if options["min"]:
                     min_peaks = [(p.pos().x(), p.pos().y()) for p in axis.min.points()]
-                    headers.extend([f"Min Peak {axis_id} X", f"Min Peak {axis_id} Y"])
+                    headers.extend([f"Min Peak {curve_name} X", f"Min Peak {curve_name} Y"])
                     for i, (x, y) in enumerate(min_peaks):
                         if i not in csv_data:
                             csv_data[i] = {}
-                        csv_data[i][f"Min Peak {axis_id} X"] = x
-                        csv_data[i][f"Min Peak {axis_id} Y"] = y
+                        csv_data[i][f"Min Peak {curve_name} X"] = x
+                        csv_data[i][f"Min Peak {curve_name} Y"] = y
 
                 # Gestion des pics maximums si sélectionnés, avec des en-têtes indépendants
                 if options["max"]:
                     max_peaks = [(p.pos().x(), p.pos().y()) for p in axis.max.points()]
-                    headers.extend([f"Max Peak {axis_id} X", f"Max Peak {axis_id} Y"])
+                    headers.extend([f"Max Peak {curve_name} X", f"Max Peak {curve_name} Y"])
                     for i, (x, y) in enumerate(max_peaks):
                         if i not in csv_data:
                             csv_data[i] = {}
-                        csv_data[i][f"Max Peak {axis_id} X"] = x
-                        csv_data[i][f"Max Peak {axis_id} Y"] = y
+                        csv_data[i][f"Max Peak {curve_name} X"] = x
+                        csv_data[i][f"Max Peak {curve_name} Y"] = y
 
             # Écriture des en-têtes dans le fichier CSV
             writer.writerow(headers)
@@ -1378,7 +1403,6 @@ class MainWindow(QtWidgets.QMainWindow):
             "Export Successful",
             f"Data has been successfully exported to {csv_path}",
         )
-
 
     def analyze_max_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
