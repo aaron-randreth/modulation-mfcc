@@ -454,6 +454,9 @@ class SoundInformation(pg.GraphicsLayoutWidget):
     def __init__(self) -> None:
         super().__init__()
         self.selection_region = pg.LinearRegionItem(swapMode="sort")
+        for line in self.selection_region.lines:
+            line.setPen(pg.mkPen(color='b', width=5))  
+            line.setHoverPen(pg.mkPen(color='g', width=5))
 
         self.sound_plot = pg.PlotItem()
         self.spectrogram_plot = pg.PlotItem()
