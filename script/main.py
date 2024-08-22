@@ -1,14 +1,12 @@
-import os
-import sys
-
 from abc import ABC, abstractmethod
 from typing import override
-
+import os
+import sys
 import threading
 import wave
 import time
 import csv
-
+import sys
 import numpy as np
 import sounddevice as sd
 from scipy.io import wavfile
@@ -44,6 +42,58 @@ from quadruple_axis_plot_item import (
     DisplayInterval,
 )
 
+class ExportCSVDialog(QtWidgets.QDialog):
+    def __init__(self, axis_ids, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Data to Export")
+
+        layout = QtWidgets.QVBoxLayout()
+
+        # Store selections in a dictionary
+        self.selections = {}
+
+        for axis_id in axis_ids:
+            group_box = QtWidgets.QGroupBox(f"Curve {axis_id} Data")
+            group_layout = QtWidgets.QFormLayout()
+
+            x_checkbox = QtWidgets.QCheckBox("Include X values")
+            y_checkbox = QtWidgets.QCheckBox("Include Y values")
+            min_checkbox = QtWidgets.QCheckBox("Include Min Peaks")
+            max_checkbox = QtWidgets.QCheckBox("Include Max Peaks")
+
+            group_layout.addRow(x_checkbox)
+            group_layout.addRow(y_checkbox)
+            group_layout.addRow(min_checkbox)
+            group_layout.addRow(max_checkbox)
+
+            group_box.setLayout(group_layout)
+
+            layout.addWidget(group_box)
+
+            # Store checkboxes in selections dictionary
+            self.selections[axis_id] = {
+                "x": x_checkbox,
+                "y": y_checkbox,
+                "min": min_checkbox,
+                "max": max_checkbox,
+            }
+
+        self.ok_button = QtWidgets.QPushButton("Export")
+        self.ok_button.clicked.connect(self.accept)
+        layout.addWidget(self.ok_button)
+
+        self.setLayout(layout)
+
+    def get_selections(self):
+        selections = {}
+        for axis_id, options in self.selections.items():
+            selections[axis_id] = {
+                "x": options["x"].isChecked(),
+                "y": options["y"].isChecked(),
+                "min": options["min"].isChecked(),
+                "max": options["max"].isChecked(),
+            }
+        return selections
 
 class POSChannelSelectionDialog(QtWidgets.QDialog):
     def __init__(self, pos_channels, parent=None):
@@ -174,7 +224,7 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
 
     def create_widgets(self) -> None:
         self._curve_type = QtWidgets.QComboBox()
-        self.ema_channel = QtWidgets.QComboBox()
+        self.ema_type = QtWidgets.QPushButton(f"Button {self.id+1},{2}")
         self.color_selection = ColorSelection()
         self.panel_choice = QtWidgets.QComboBox()
         self.visibility_checkbox = QtWidgets.QCheckBox()
@@ -183,7 +233,9 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         self._curve_type.addItems(
             ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]
         )
-
+        self.ema_type.setStyleSheet(
+            "background-color: lightblue; border: 1px solid black; padding: 5px"
+        )
         self.panel_choice.addItems(["1", "2", "3", "4"])
         self.visibility_checkbox.setChecked(True)
         self._derivation_type.addItems(
@@ -191,16 +243,19 @@ class TreeWidgetItem(QtWidgets.QTreeWidgetItem):
         )
 
     def lay_out_widgets(self) -> None:
+        # Affecte les widgets aux colonnes correspondantes (sauter la colonne EMA)
         self.parent.setItemWidget(self, 0, self._curve_type)
-        self.parent.setItemWidget(self, 1, self.ema_channel)
-        self.parent.setItemWidget(self, 2, self.color_selection)
-        self.parent.setItemWidget(self, 3, self.panel_choice)
-        self.parent.setItemWidget(self, 4, self.visibility_checkbox)
-        self.parent.setItemWidget(self, 5, self._derivation_type)
+        # self.parent.setItemWidget(self, 1, self.ema_type)  # Supprimer cette ligne
+        self.parent.setItemWidget(self, 1, self.color_selection)  # Décale la colonne
+        self.parent.setItemWidget(self, 2, self.panel_choice)
+        self.parent.setItemWidget(self, 3, self.visibility_checkbox)
+        self.parent.setItemWidget(self, 4, self._derivation_type)
+
+
 
     def setup_signals(self) -> None:
         self.curve_type_changed = self._curve_type.currentIndexChanged
-        self.ema_channel_changed = self.ema_channel.currentIndexChanged
+        # self.ema_type_changed = self.ema_type.currentIndexChanged
         self.color_changed = self.color_selection.color_chosen
         self.panel_changed = self.panel_choice.currentIndexChanged
         self.visibility_changed = self.visibility_checkbox.stateChanged
@@ -235,7 +290,8 @@ class Dashboard(QtWidgets.QTreeWidget):
         super().__init__()
         self.custom_curves = custom_curves
         self.row_count = 0
-        self.headers = ["Acoustique", "EMA", "Couleur", "Panel", "Show", "Dérivée"]
+        # Supprime "EMA" de la liste des en-têtes
+        self.headers = ["Curves", "Color", "Panel", "Show", "Derivative"]
 
         self.setColumnCount(len(self.headers))
         self.setHeaderLabels(self.headers)
@@ -250,12 +306,11 @@ class Dashboard(QtWidgets.QTreeWidget):
             item._curve_type.addItem(custom_curve_name)
         # for _ in range(4):
         #     self.append_row()
-
     def resize_column(self) -> None:
-        self.setColumnWidth(self.headers.index("EMA"), 90)
+        # Ajustez les indices des colonnes maintenant qu'il n'y a plus d'EMA
+        self.setColumnWidth(self.headers.index("Color"), 90)
         self.setColumnWidth(self.headers.index("Panel"), 50)
         self.setColumnWidth(self.headers.index("Show"), 20)
-
     def _update_curve(self, item: TreeWidgetItem) -> None:
         self.update_curve.emit(item.id, item.curve_type, item.derivation_type)
 
@@ -423,6 +478,7 @@ class ManualPointManagement(QtWidgets.QToolBar):
     min_analysis_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
     max_analysis_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
     export_to_csv_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()
+    remove_point_clicked: QtCore.pyqtSignal = QtCore.pyqtSignal()  # New Signal for removing points
 
     def __init__(
         self, panel_nb: int = 4, parent: QtWidgets.QWidget | None = None
@@ -432,21 +488,21 @@ class ManualPointManagement(QtWidgets.QToolBar):
         self.panel_nb = panel_nb
 
         self.panel_selector: QtWidgets.QComboBox = QtWidgets.QComboBox(self)
-        self.add_min_action: QtWidgets.QAction = QtWidgets.QAction("Add Min", self)
-        self.add_max_action: QtWidgets.QAction = QtWidgets.QAction("Add Max", self)
+        self.add_min_action: QtWidgets.QAction = QtWidgets.QAction("Analyze Max", self)
+        self.add_max_action: QtWidgets.QAction = QtWidgets.QAction("Analyze Min", self)
         self.export_to_csv_action: QtWidgets.QAction = QtWidgets.QAction(
             "Export to CSV", self
         )
 
         self.enable_checkbox: QtWidgets.QCheckBox = QtWidgets.QCheckBox(
-            "Gestion manuelle", self
+            "Manual management", self
         )
         self.operation_selector: QtWidgets.QComboBox = QtWidgets.QComboBox(self)
 
         self.panel_selector.addItems([f"Panel {i+1}" for i in range(self.panel_nb)])
         self.operation_selector.addItem("Add min", PointOperation.ADD_MIN)
         self.operation_selector.addItem("Add max", PointOperation.ADD_MAX)
-        self.operation_selector.addItem("Remove point", PointOperation.REMOVE)
+        self.operation_selector.addItem("Remove point", PointOperation.REMOVE)  # New operation type
 
         self.panel_selector.currentIndexChanged.connect(self.on_panel_changed)
         self.add_min_action.triggered.connect(self.on_add_min_clicked)
@@ -460,6 +516,10 @@ class ManualPointManagement(QtWidgets.QToolBar):
         self.addAction(self.add_min_action)
         self.addAction(self.add_max_action)
         self.addAction(self.export_to_csv_action)
+
+    def on_remove_point_clicked(self) -> None:
+        self.remove_point_clicked.emit()  # Emit the signal when remove is clicked
+
 
     def on_panel_changed(self, index: int) -> None:
         self.panel_changed.emit(index)
@@ -673,7 +733,7 @@ class F0(DataSource):
             audio_data = audio_data[:, 0]
 
         method = "praatac"
-        hop_size = 0.01
+        hop_size = 0.005
         min_pitch = 75
         max_pitch = 600
         interp_unvoiced = "linear"
@@ -768,7 +828,12 @@ class CurveGenerator:
             ScatterPlotPlotter(self.toolbar),
             ScatterPlotPlotter(self.toolbar),
             ScatterPlotPlotter(self.toolbar),
-            CurvePlotter(self.toolbar)
+            CurvePlotter(self.toolbar),
+            CurvePlotter(self.toolbar),
+                        CurvePlotter(self.toolbar),
+                                    CurvePlotter(self.toolbar),
+
+            
         ]
 
     def generate(
@@ -1003,6 +1068,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         nb_panels = 4
+        self.selected_max_peaks = {}  # Dictionnaire pour stocker les pics max sélectionnés par panel et axis_id
+        self.selected_min_peaks = {}  # Dictionnaire pour stocker les pics min sélectionnés par panel et axis_id
 
         self.init_main_layout()
         self.custom_curves = {}
@@ -1014,6 +1081,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.annotation_widget = DisplayInterval(self.audio_widget)
 
         self.point_management_toolbar = ManualPointManagement(nb_panels)
+        self.point_management_toolbar.remove_point_clicked.connect(self.remove_selected_point)  # Connect to the new method
         self.curve_generator = CurveGenerator(self.point_management_toolbar)
         self.dashboard_widget = DashboardWidget(self.custom_curves)
         self.zoom = ZoomToolbar(self.audio_widget.selection_region)
@@ -1048,7 +1116,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_control_widget(self.annotation_indicator)
         self.add_control_widget(self.create_load_buttons())
         self.add_control_widget(self.create_audio_control_buttons())
-        # self.add_control_widget(self.create_spectrogram_checkbox())
+        self.add_control_widget(self.create_spectrogram_checkbox())
         self.add_control_widget(self.tier_selection)
         self.add_control_widget(self.dashboard_widget)
         self.add_control_widget(self.config_mfcc_button)
@@ -1077,10 +1145,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.add_control_widget(self.create_analysis_controls())
         self.add_control_widget(self.point_management_toolbar)
         self.point_management_toolbar.min_analysis_clicked.connect(
-            self.analyze_min_peaks
+            self.analyze_max_peaks
         )
         self.point_management_toolbar.max_analysis_clicked.connect(
-            self.analyze_max_peaks
+            self.analyze_min_peaks
         )
         self.point_management_toolbar.export_to_csv_clicked.connect(self.export_to_csv)
 
@@ -1093,7 +1161,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.start(100)
         self.playing = False
         self.audio_cursor = pg.LinearRegionItem()
-        self.audio_cursor.setBrush(pg.mkBrush(0, 255, 0, 50))
+        self.audio_cursor.setBrush(pg.mkBrush(0, 0, 255, 150))
         self.audio_widget.sound_plot.addItem(self.audio_cursor)
         self.audio_cursor.hide()
 
@@ -1113,6 +1181,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         main_layout.addWidget(curve_column_widget, 3)
         main_layout.addWidget(control_column_widget, 2)
+
 
     def create_load_buttons(self) -> QtWidgets.QGroupBox:
         load_group_box = QtWidgets.QGroupBox("Load Audio, TextGrid and POS")
@@ -1135,6 +1204,48 @@ class MainWindow(QtWidgets.QMainWindow):
 
         load_group_box.setLayout(load_layout)
         return load_group_box
+    def analyze_min_peaks(self) -> None:
+        panel_id = self.point_management_toolbar.panel
+        if panel_id < 0:
+            return
+
+        panel = self.panels[panel_id].panel
+
+        region = self.audio_widget.selection_region.getRegion()
+        region_start, region_end = region
+
+        for axis_id, axis in panel.rotation.items():
+            curve = axis.curve
+            if isinstance(curve, pg.PlotDataItem):
+                x_data = curve.xData
+                y_data = curve.yData
+            elif isinstance(curve, pg.ScatterPlotItem):
+                x_data = np.array([p.pos().x() for p in curve.points()])
+                y_data = np.array([p.pos().y() for p in curve.points()])
+            else:
+                continue
+
+            region_mask = (x_data >= region_start) & (x_data <= region_end)
+            x_data_region = x_data[region_mask]
+            y_data_region = y_data[region_mask]
+            peaks, _ = find_peaks(-y_data_region)
+
+            peak_x = x_data_region[peaks]
+            peak_y = y_data_region[peaks]
+            minima_plot = pg.ScatterPlotItem(
+                x=peak_x, y=peak_y, pen=pg.mkPen("b"), brush=pg.mkBrush(0, 0, 255, 150), size=10
+            )
+
+            # Connect the signal to detect when a peak is clicked
+            minima_plot.sigClicked.connect(lambda plot, points: self.handle_point_click(plot, points, axis_id, panel_id, "min"))
+
+            # Store the reference of the minima plot and points in axis
+            axis.min_peaks_plot = minima_plot  # Store the entire ScatterPlotItem
+            axis.min_peaks = list(zip(peak_x, peak_y))
+
+            panel.add_item(axis_id, minima_plot)
+            self.selected_min_peaks[(panel_id, axis_id)] = []  # Initialize selection list for min peaks
+
 
     def load_pos_file(self) -> None:
         pos_path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -1162,10 +1273,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 "generator_function": self.generate_pos_curve,
                 "params": {"channel_id": channel_id},
             }
-
             for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
                 item = self.dashboard_widget.dashboard.topLevelItem(i)
-                item.ema_channel.addItem(channel_name)
+                item._curve_type.addItem(channel_name)
 
     def generate_pos_curve(
         self, audio_path: str, params: dict, derivation_id: int
@@ -1179,7 +1289,8 @@ class MainWindow(QtWidgets.QMainWindow):
         operation = self.curve_generator.derivations[derivation_id]
         x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
 
-        plotter = CurvePlotter(self.toolbar)
+        # Corrected line:
+        plotter = CurvePlotter(self.point_management_toolbar)
         return plotter.plot(x, y)
 
     def add_curve_widget(self, widget: QtWidgets.QWidget) -> None:
@@ -1234,136 +1345,95 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.export_csv_button)
         analysis_controls_widget.setLayout(layout)
         return analysis_controls_widget
-
     def export_to_csv(self):
-        panel_id = self.point_management_toolbar.panel
-        if panel_id < 0:
-            return
-
-        panel = self.panels[panel_id].panel
-
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("Select Curves and Data to Export")
-        layout = QtWidgets.QVBoxLayout()
-
-        curve_options = {}
-
-        for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
-            item = self.dashboard_widget.dashboard.topLevelItem(i)
-            curve_name = item._curve_type.currentText()
-            axis_id = i
-
-            curve_layout = QtWidgets.QHBoxLayout()
-            curve_label = QtWidgets.QLabel(f"Curve {axis_id + 1}: {curve_name}")
-            curve_options[axis_id] = {
-                "x": QtWidgets.QCheckBox("X"),
-                "y": QtWidgets.QCheckBox("Y"),
-                "min": QtWidgets.QCheckBox("Min Peaks"),
-                "max": QtWidgets.QCheckBox("Max Peaks"),
-            }
-
-            curve_layout.addWidget(curve_label)
-            for option, checkbox in curve_options[axis_id].items():
-                curve_layout.addWidget(checkbox)
-
-            layout.addLayout(curve_layout)
-
-        button_box = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
-        )
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-
-        dialog.setLayout(layout)
-
-        if dialog.exec_() != QtWidgets.QDialog.Accepted:
-            return
-
-        selected_data = {
-            axis_id: opts
-            for axis_id, opts in curve_options.items()
-            if any(cb.isChecked() for cb in opts.values())
-        }
-
-        if not selected_data:
-            return
+        # Récupère les identifiants d'axes sélectionnés pour l'exportation
+        axis_ids = list(self.panels[self.point_management_toolbar.panel].panel.rotation.keys())
+        
+        dialog = ExportCSVDialog(axis_ids, self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            selected_data = dialog.get_selections()
 
             csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(
                 self, "Save CSV", "", "CSV Files (*.csv)"
             )
 
-        if not csv_path:
-            return
-
-        self.save_curves_to_csv(panel, selected_data, csv_path)
-
+            if not csv_path:
+                return  # Quitte si l'utilisateur annule la sauvegarde
+            
+            panel = self.panels[self.point_management_toolbar.panel].panel
+            self.save_curves_to_csv(panel, selected_data, csv_path)
     def save_curves_to_csv(self, panel, selected_data, csv_path):
-        region = self.audio_widget.selection_region.getRegion()
-        region_start, region_end = region
-
-        all_times = set()
-        curve_data = {}
-
-        for axis_id, options in selected_data.items():
-            calculated_curve = panel.rotation[axis_id]
-            x_data, y_data = axis.curve.getData()
-
-            curve_data[axis_id] = {"x": x_data, "y": y_data, "min": [], "max": []}
-
-            if options["min"].isChecked():
-                curve_data[axis_id]["min"] = [
-                    (x, y) for x, y in calculated_curve.min.getData() if region_start <= x <= region_end
-                ]
-            if options["max"].isChecked():
-                curve_data[axis_id]["max"] = [
-                    (x, y) for x, y in calculated_curve.min.getData() if region_start <= x <= region_end
-                ]
-
-            if options["x"].isChecked() or options["y"].isChecked():
-                all_times.update(x_data)
-
-        all_times = sorted(all_times)
-
         with open(csv_path, mode="w", newline="") as file:
             writer = csv.writer(file)
 
-            headers = ["Time"]
+            headers = []
+            csv_data = {}
+
+            # Pour chaque axe sélectionné et ses options
             for axis_id, options in selected_data.items():
-                if options["x"].isChecked():
+                axis = panel.rotation[axis_id]
+
+                # Récupération des données de courbe (x et y)
+                if isinstance(axis.curve, pg.PlotDataItem):
+                    x_data = axis.curve.xData
+                    y_data = axis.curve.yData
+                elif isinstance(axis.curve, pg.ScatterPlotItem):
+                    x_data = np.array([p.pos().x() for p in axis.curve.points()])
+                    y_data = np.array([p.pos().y() for p in axis.curve.points()])
+                else:
+                    continue
+
+                # Mise à jour des en-têtes en fonction de l'axe
+                if options["x"]:
                     headers.append(f"Curve {axis_id} X")
-                if options["y"].isChecked():
+                if options["y"]:
                     headers.append(f"Curve {axis_id} Y")
-                if options["min"].isChecked():
-                    headers.append(f"Curve {axis_id} Min Peaks X")
-                    headers.append(f"Curve {axis_id} Min Peaks Y")
-                if options["max"].isChecked():
-                    headers.append(f"Curve {axis_id} Max Peaks X")
-                    headers.append(f"Curve {axis_id} Max Peaks Y")
+
+                # Remplissage des données CSV pour chaque point de la courbe
+                for i, x in enumerate(x_data):
+                    if x not in csv_data:
+                        csv_data[x] = {}
+
+                    if options["x"]:
+                        csv_data[x][f"Curve {axis_id} X"] = x
+                    if options["y"]:
+                        csv_data[x][f"Curve {axis_id} Y"] = y_data[i]
+
+                # Gestion des pics minimums et maximums manuels
+                min_peaks = axis.min_peaks if hasattr(axis, "min_peaks") else []
+                manual_min_peaks = axis.manual_min_points if hasattr(axis, "manual_min_points") else []
+
+                max_peaks = axis.max_peaks if hasattr(axis, "max_peaks") else []
+                manual_max_peaks = axis.manual_max_points if hasattr(axis, "manual_max_points") else []
+
+                # Ajout des pics minimums
+                if min_peaks or manual_min_peaks:
+                    if f"Min Peak {axis_id} X" not in headers:
+                        headers.extend([f"Min Peak {axis_id} X", f"Min Peak {axis_id} Y"])
+                    for x, y in min_peaks + manual_min_peaks:
+                        if x not in csv_data:
+                            csv_data[x] = {}
+                        csv_data[x][f"Min Peak {axis_id} X"] = x
+                        csv_data[x][f"Min Peak {axis_id} Y"] = y
+
+                # Ajout des pics maximums
+                if max_peaks or manual_max_peaks:
+                    if f"Max Peak {axis_id} X" not in headers:
+                        headers.extend([f"Max Peak {axis_id} X", f"Max Peak {axis_id} Y"])
+                    for x, y in max_peaks + manual_max_peaks:
+                        if x not in csv_data:
+                            csv_data[x] = {}
+                        csv_data[x][f"Max Peak {axis_id} X"] = x
+                        csv_data[x][f"Max Peak {axis_id} Y"] = y
+
+            # Écriture des en-têtes dans le fichier CSV
             writer.writerow(headers)
-            for t in all_times:
-                row = [t]
-                for axis_id, options in selected_data.items():
-                    data = curve_data[axis_id]
-                    if options["x"].isChecked():
-                        row.append(t if t in data["x"] else np.nan)
-                    if options["y"].isChecked():
-                        y_value = (
-                            np.interp(t, data["x"], data["y"])
-                            if t in data["x"]
-                            else np.nan
-                        )
-                        row.append(y_value)
-                    if options["min"].isChecked():
-                        min_peak = next(
-                            (p for p in data["min"] if p[0] == t), (np.nan, np.nan)
-                        )
-                        row.extend(min_peak)
-                    if options["max"].isChecked():
-                        max_peak = next(
-                            (p for p in data["max"] if p[0] == t), (np.nan, np.nan)
-                        )
-                        row.extend(max_peak)
+
+            # Écriture des données dans le fichier CSV triées par les valeurs x
+            for x in sorted(csv_data.keys()):
+                row = []
+                for header in headers:
+                    row.append(csv_data[x].get(header, None))  # Remplit seulement les colonnes pertinentes
                 writer.writerow(row)
 
         QtWidgets.QMessageBox.information(
@@ -1371,6 +1441,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "Export Successful",
             f"Data has been successfully exported to {csv_path}",
         )
+
 
     def analyze_max_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
@@ -1382,73 +1453,158 @@ class MainWindow(QtWidgets.QMainWindow):
         region = self.audio_widget.selection_region.getRegion()
         region_start, region_end = region
 
-        for axis_id, item in panel.rotation.items():
-            calculated_curve: CalculationValues = item
-
-            x_data, y_data = calculated_curve.curve.getData()
+        for axis_id, axis in panel.rotation.items():
+            curve = axis.curve
+            if isinstance(curve, pg.PlotDataItem):
+                x_data = curve.xData
+                y_data = curve.yData
+            elif isinstance(curve, pg.ScatterPlotItem):
+                x_data = np.array([p.pos().x() for p in curve.points()])
+                y_data = np.array([p.pos().y() for p in curve.points()])
+            else:
+                continue
 
             region_mask = (x_data >= region_start) & (x_data <= region_end)
-
             x_data_region = x_data[region_mask]
             y_data_region = y_data[region_mask]
 
             peaks, _ = find_peaks(y_data_region)
-
             peak_x = x_data_region[peaks]
             peak_y = y_data_region[peaks]
+            peaks_plot = pg.ScatterPlotItem(
+                x=peak_x, y=peak_y, pen=pg.mkPen("r"), brush=pg.mkBrush(255, 0, 0, 150), size=10
+            )
 
-            calculated_curve.max.setData(peak_x, peak_y)
+            # Connect the signal to detect when a peak is clicked
+            peaks_plot.sigClicked.connect(lambda plot, points: self.handle_point_click(plot, points, axis_id, panel_id, "max"))
 
-            peak_info = "\n".join(
-                [
-                    f"Peak {i + 1}: X = {px}, Y = {py}"
-                    for i, (px, py) in enumerate(zip(peak_x, peak_y))
+            # Store the reference of the peaks plot and points in axis
+            axis.max_peaks_plot = peaks_plot  # Store the entire ScatterPlotItem
+            axis.max_peaks = list(zip(peak_x, peak_y))
+
+            panel.add_item(axis_id, peaks_plot)
+            self.selected_max_peaks[(panel_id, axis_id)] = []  # Initialize selection list
+    def handle_point_click(self, plot, points, axis_id, panel_id, peak_type):
+        tolerance = 0.01  # Set a small tolerance for detecting the nearest point
+        
+        for point in points:
+            clicked_x, clicked_y = point.pos().x(), point.pos().y()
+
+            # Handle automatic max points
+            if peak_type == "max" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'max_peaks'):
+                self.panels[panel_id].panel.rotation[axis_id].max_peaks = [
+                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].max_peaks
+                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
                 ]
-            )
-            QtWidgets.QMessageBox.information(
-                self,
-                "Peak Analysis",
-                f"Peaks in Panel {panel_id + 1} (Selected Region):\n\n{peak_info}",
-            )
 
-    def analyze_min_peaks(self) -> None:
+            # Handle manual max points
+            if peak_type == "max" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'manual_max_points'):
+                self.panels[panel_id].panel.rotation[axis_id].manual_max_points = [
+                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].manual_max_points
+                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
+                ]
+
+            # Handle automatic min points
+            if peak_type == "min" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'min_peaks'):
+                self.panels[panel_id].panel.rotation[axis_id].min_peaks = [
+                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].min_peaks
+                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
+                ]
+
+            # Handle manual min points
+            if peak_type == "min" and hasattr(self.panels[panel_id].panel.rotation[axis_id], 'manual_min_points'):
+                self.panels[panel_id].panel.rotation[axis_id].manual_min_points = [
+                    (px, py) for px, py in self.panels[panel_id].panel.rotation[axis_id].manual_min_points
+                    if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
+                ]
+
+            # Refresh the plot by removing the clicked point
+            remaining_points = [
+                (px, py) for px, py in zip(plot.data['x'], plot.data['y'])
+                if not (abs(px - clicked_x) < tolerance and abs(py - clicked_y) < tolerance)
+            ]
+
+            if remaining_points:
+                remaining_x, remaining_y = zip(*remaining_points)
+            else:
+                remaining_x, remaining_y = [], []
+
+            plot.setData(x=remaining_x, y=remaining_y)
+
+    def remove_selected_point(self) -> None:
         panel_id = self.point_management_toolbar.panel
         if panel_id < 0:
             return
 
         panel = self.panels[panel_id].panel
 
-        region = self.audio_widget.selection_region.getRegion()
-        region_start, region_end = region
+        # Loop through each axis and check for selected points to remove
+        for axis_id, axis in panel.rotation.items():
+            # Remove selected max peaks (automatic and manual)
+            if (panel_id, axis_id) in self.selected_max_peaks:
+                if hasattr(axis, 'max_peaks_plot') and axis.max_peaks_plot is not None:
+                    selected_points = self.selected_max_peaks[(panel_id, axis_id)]
 
-        for axis_id, item in panel.rotation.items():
-            calculated_curve: CalculationValues = item
+                    # Collect remaining points (those that are not selected)
+                    remaining_points = [
+                        (x, y) for x, y in zip(axis.max_peaks_plot.data['x'], axis.max_peaks_plot.data['y'])
+                        if (x, y) not in [(p.pos().x(), p.pos().y()) for p in selected_points]
+                    ]
 
-            x_data, y_data = calculated_curve.curve.getData()
+                    if remaining_points:
+                        # Separate x and y for remaining points
+                        remaining_x, remaining_y = zip(*remaining_points)
+                    else:
+                        remaining_x, remaining_y = [], []
 
-            region_mask = (x_data >= region_start) & (x_data <= region_end)
+                    # Update the ScatterPlotItem with the remaining points
+                    axis.max_peaks_plot.setData(x=remaining_x, y=remaining_y)
 
-            x_data_region = x_data[region_mask]
-            y_data_region = y_data[region_mask]
+                    # Clear the selection
+                    self.selected_max_peaks[(panel_id, axis_id)] = []
 
-            peaks, _ = find_peaks(-y_data_region)
+                # Remove manual max peaks
+                if hasattr(axis, 'manual_max_points'):
+                    axis.manual_max_points = [
+                        point for point in axis.manual_max_points if point not in self.selected_max_peaks[(panel_id, axis_id)]
+                    ]
+            
+            # Remove selected min peaks (automatic and manual)
+            if (panel_id, axis_id) in self.selected_min_peaks:
+                if hasattr(axis, 'min_peaks_plot') and axis.min_peaks_plot is not None:
+                    selected_points = self.selected_min_peaks[(panel_id, axis_id)]
 
-            peak_x = x_data_region[peaks]
-            peak_y = y_data_region[peaks]
+                    # Collect remaining points (those that are not selected)
+                    remaining_points = [
+                        (x, y) for x, y in zip(axis.min_peaks_plot.data['x'], axis.min_peaks_plot.data['y'])
+                        if (x, y) not in [(p.pos().x(), p.pos().y()) for p in selected_points]
+                    ]
 
-            calculated_curve.min.setData(peak_x, peak_y)
+                    if remaining_points:
+                        # Separate x and y for remaining points
+                        remaining_x, remaining_y = zip(*remaining_points)
+                    else:
+                        remaining_x, remaining_y = [], []
 
-            min_info = "\n".join(
-                [
-                    f"Minimum {i + 1}: X = {px}, Y = {py}"
-                    for i, (px, py) in enumerate(zip(peak_x, peak_y))
-                ]
-            )
-            QtWidgets.QMessageBox.information(
-                self,
-                "Minimum Peak Analysis",
-                f"Minima in Panel {panel_id + 1} (Selected Region):\n\n{min_info}",
-            )
+                    # Update the ScatterPlotItem with the remaining points
+                    axis.min_peaks_plot.setData(x=remaining_x, y=remaining_y)
+
+                    # Clear the selection
+                    self.selected_min_peaks[(panel_id, axis_id)] = []
+
+                # Remove manual min peaks
+                if hasattr(axis, 'manual_min_points'):
+                    axis.manual_min_points = [
+                        point for point in axis.manual_min_points if point not in self.selected_min_peaks[(panel_id, axis_id)]
+                    ]
+
+            # Refresh the panel
+            panel.update()
+
+        QtWidgets.QMessageBox.information(
+            self, "Point Removed", f"Selected points have been removed from Panel {panel_id + 1}."
+        )
+
 
     def create_spectrogram_checkbox(self) -> QtWidgets.QGroupBox:
         spectrogram_group_box = QtWidgets.QGroupBox("Select Spectrogram")
