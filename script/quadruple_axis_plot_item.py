@@ -362,14 +362,15 @@ class Panel(QuadrupleAxisPlotItem):
             axis = self.getAxis(axis_id)
             axis.setPen(pg.mkPen(color=color))
 
-            # Manually update the tick labels with the new color
-            ticks = axis.tickValues()
+            ticks = axis.tickValues(axis.range[0], axis.range[1], axis.boundingRect().height())
             for tick in ticks:
-                for pos, label in tick:
-                    text_item = pg.TextItem(text=label, color=color)
-                    text_item.setPos(pos, 0)
-                    axis.scene().addItem(text_item)
 
+                if isinstance(tick, tuple):
+                    tick_x = tick[0]  
+                else:
+                    tick_x = tick 
+
+                   
     def get_item_axis(self, item: CalculationValues) -> str | None:
         if item not in self.rotation.inverse:
             return None
