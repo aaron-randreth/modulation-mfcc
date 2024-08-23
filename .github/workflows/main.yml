@@ -1,4 +1,4 @@
-name: Build macOS Executable
+name: Build Ubuntu Executable
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest  # ou macos-latest si tu travailles sur macOS
 
     steps:
     - name: Checkout code
@@ -24,12 +24,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Install PyInstaller
+      run: |
+        python -m pip install pyinstaller
+
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile script/main.py  # Remplace main.py par ton fichier principal
+        pyinstaller --onefile script/main.py  # Remplace par le chemin de ton fichier principal
 
     - name: Upload executable
       uses: actions/upload-artifact@v2
       with:
-        name: macos-executable
-        path: dist/main  # Remplace main par le nom de l'exécutable généré
+        name: ubuntu-executable  # ou macos-executable si sur macOS
+        path: dist/main  # Remplace 'main' par le nom de l'exécutable généré
