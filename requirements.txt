@@ -1,4 +1,3 @@
-python
 scipy
 numpy<2
 librosa
