@@ -11,7 +11,5 @@ findiff
 sounddevice
 pydub
 bidict
-copy
-inspect
 findiff
 
