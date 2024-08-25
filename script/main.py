@@ -2002,58 +2002,55 @@ class MainWindow(QtWidgets.QMainWindow):
         self.playing = False
 class SyncCursor:
     def __init__(self, panels, audio_widget):
-        # panels is a list of PanelWidget instances and audio_widget is the SoundInformation instance
         self.panels = panels
         self.audio_widget = audio_widget
         self.sync_cursor_lines = []
 
-        # Create a red dashed line cursor for each panel and the audio widget
+        # Create a sync line for each panel and the audio widget
         for panel in self.panels:
-            sync_line = pg.InfiniteLine(
-                angle=90, pen=pg.mkPen('r', style=QtCore.Qt.DashLine)
-            )
+            sync_line = pg.InfiniteLine(angle=90, pen=pg.mkPen('r', style=QtCore.Qt.DashLine))
             panel.panel.addItem(sync_line)
             self.sync_cursor_lines.append(sync_line)
 
-        # Add a sync line to the audio widget
-        self.audio_sync_line = pg.InfiniteLine(
-            angle=90, pen=pg.mkPen('r', style=QtCore.Qt.DashLine)
-        )
+        # Create a sync line for the audio widget
+        self.audio_sync_line = pg.InfiniteLine(angle=90, pen=pg.mkPen('r', style=QtCore.Qt.DashLine))
         self.audio_widget.sound_plot.addItem(self.audio_sync_line)
 
-        # Connect mouse move event to the update function for all panels and audio widget
+        # Connect all panels to the same mouse event handler
         for panel in self.panels:
             panel.panel.scene().sigMouseMoved.connect(self.update_cursor_position)
         self.audio_widget.sound_plot.scene().sigMouseMoved.connect(self.update_cursor_position)
 
     def update_cursor_position(self, pos):
-        # This function is called whenever the mouse moves in one of the panels or the audio widget
+        # Handle the audio widget first
+        vb_audio = self.audio_widget.sound_plot.getViewBox()
+        if vb_audio.sceneBoundingRect().contains(pos):
+            mouse_point = vb_audio.mapSceneToView(pos)
+            x_pos = mouse_point.x()
+
+            # Update the audio sync line
+            self.audio_sync_line.setPos(x_pos)
+
+            # Update the sync lines in all panels
+            for sync_line in self.sync_cursor_lines:
+                sync_line.setPos(x_pos)
+            return
+
+        # If not in audio, check in the panels
         for panel in self.panels:
-            vb = panel.panel.getViewBox()
-            if vb.sceneBoundingRect().contains(pos):
-                mouse_point = vb.mapSceneToView(pos)
+            vb_panel = panel.panel.getViewBox()
+            if vb_panel.sceneBoundingRect().contains(pos):
+                mouse_point = vb_panel.mapSceneToView(pos)
                 x_pos = mouse_point.x()
 
-                # Update the position of all sync cursors
+                # Update all sync cursors
                 for sync_line in self.sync_cursor_lines:
                     sync_line.setPos(x_pos)
 
                 # Update the audio sync line as well
                 self.audio_sync_line.setPos(x_pos)
-                break  # Once we find the valid panel, stop checking the rest
+                break
 
-        # Check if the mouse is in the audio widget
-        vb = self.audio_widget.sound_plot.getViewBox()
-        if vb.sceneBoundingRect().contains(pos):
-            mouse_point = vb.mapSceneToView(pos)
-            x_pos = mouse_point.x()
-
-            # Update the position of all sync cursors
-            for sync_line in self.sync_cursor_lines:
-                sync_line.setPos(x_pos)
-
-            # Update the audio sync line as well
-            self.audio_sync_line.setPos(x_pos)
 
 if __name__ == "__main__":
     pg.setConfigOptions(foreground="black", background="w")
