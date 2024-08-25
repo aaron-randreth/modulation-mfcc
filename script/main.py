@@ -1382,7 +1382,7 @@ class MainWindow(QtWidgets.QMainWindow):
             headers = []
             csv_data = {}
 
-            # Ajout des données des courbes
+            # Add curve data
             for idx, axis_id in enumerate(axis_ids):
                 curve_name = curve_names[idx]
                 if curve_name not in selected_data:
@@ -1406,46 +1406,79 @@ class MainWindow(QtWidgets.QMainWindow):
                     if options["y"]:
                         csv_data[i][f"{curve_name} Y"] = y_data[i]
 
-                    # Ajout des mots des tiers pour chaque point temporel de cette courbe
-                    if selected_tiers and self.annotation_data:
-                        for tier_name in selected_tiers:
-                            tier_header = f"{curve_name} TextGrid Tier '{tier_name}'"
-                            headers.append(tier_header) if tier_header not in headers else None
+                if options["min"]:
+                    min_peaks = [(p.pos().x(), p.pos().y()) for p in axis.min.points()]
+                    headers.extend([f"Min Peak {curve_name} X", f"Min Peak {curve_name} Y"])
+                    for i, (x, y) in enumerate(min_peaks):
+                        csv_data[i][f"Min Peak {curve_name} X"] = x
+                        csv_data[i][f"Min Peak {curve_name} Y"] = y
 
-                            tier = self.annotation_data.get_tier_by_name(tier_name)
+                if options["max"]:
+                    max_peaks = [(p.pos().x(), p.pos().y()) for p in axis.max.points()]
+                    headers.extend([f"Max Peak {curve_name} X", f"Max Peak {curve_name} Y"])
+                    for i, (x, y) in enumerate(max_peaks):
+                        csv_data[i][f"Max Peak {curve_name} X"] = x
+                        csv_data[i][f"Max Peak {curve_name} Y"] = y
+
+                # Add TextGrid tier data if available
+                if selected_tiers and self.annotation_data:
+                    for tier_name in selected_tiers:
+                        headers.append(f"TextGrid Tier '{tier_name},{curve_name}'")
+                        tier = self.annotation_data.get_tier_by_name(tier_name)
+
+                        # Process each interval in the selected tier
+                        for i, x in enumerate(x_data):
                             word = ""
-
-                            # Vérification de quel mot (intervalle) couvre ce point temporel
                             for interval in tier.intervals:
                                 if interval.start_time <= x <= interval.end_time:
-                                    word = interval.text  # Récupérer le mot de l'intervalle
+                                    word = interval.text
                                     break
+                            csv_data[i][f"TextGrid Tier '{tier_name},{curve_name}'"] = word
 
-                            csv_data[i][tier_header] = word
-
-            # Calculer et ajouter la durée et/ou la moyenne si sélectionné
+            # Calculate and add duration/mean based on the selected region or TextGrid tier
             if calculation_choices:
                 if calculation_choices["calculate_duration"] or calculation_choices["calculate_mean"]:
                     headers.append("Duration")
                     headers.append("Mean")
 
-                    region = self.audio_widget.selection_region.getRegion()  # Obtenir la région sélectionnée
-                    region_start, region_end = region
-                    duration = region_end - region_start
+                    # If the user selected a specific region or a tier, calculate based on that
+                    if calculation_choices["region_or_tier"] == "Region Selection":
+                        region = self.audio_widget.selection_region.getRegion()
+                        region_start, region_end = region
+                        duration = region_end - region_start
 
-                    # Filtrer les valeurs Y qui sont dans la région sélectionnée
-                    region_y_values = [
-                        y for x, y in zip(x_data, y_data) if region_start <= x <= region_end
-                    ]
+                        region_y_values = [
+                            y for x, y in zip(x_data, y_data) if region_start <= x <= region_end
+                        ]
+                        mean_value = np.mean(region_y_values) if region_y_values else 0
 
-                    # Calcul de la moyenne et de la durée
-                    mean_value = np.mean(region_y_values) if region_y_values else 0
+                        csv_data[0]["Duration"] = duration
+                        csv_data[0]["Mean"] = mean_value
+                    else:
+                        # Calculate for the selected TextGrid tier
+                        tier_name = calculation_choices["region_or_tier"]
+                        tier = self.annotation_data.get_tier_by_name(tier_name)
+                        interval_durations = []
+                        interval_means = []
 
-                    # Stocker les résultats dans la première ligne du CSV (ou là où cela est approprié)
-                    csv_data[0]["Duration"] = duration
-                    csv_data[0]["Mean"] = mean_value
+                        for interval in tier.intervals:
+                            interval_start, interval_end = interval.start_time, interval.end_time
+                            interval_duration = interval_end - interval_start
+                            interval_y_values = [
+                                y for x, y in zip(x_data, y_data) if interval_start <= x <= interval_end
+                            ]
+                            interval_mean = np.mean(interval_y_values) if interval_y_values else 0
 
-            # Écriture des en-têtes et des données dans le fichier CSV
+                            interval_durations.append(interval_duration)
+                            interval_means.append(interval_mean)
+
+                        total_duration = sum(interval_durations)
+                        average_mean = np.mean(interval_means) if interval_means else 0
+
+                        csv_data[0]["Duration"] = total_duration
+                        csv_data[0]["Mean"] = average_mean
+
+            # Write headers and data to the CSV file
             writer.writerow(headers)
             for i in sorted(csv_data.keys()):
                 row = [csv_data[i].get(header, "") for header in headers]
