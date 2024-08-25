@@ -1407,6 +1407,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if options["y"]:
                     headers.append(f"{curve_name} Y")
 
+                # Populate csv_data for each curve
                 for i, x in enumerate(x_data):
                     if i not in csv_data:
                         csv_data[i] = {}
@@ -1416,6 +1417,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     if options["y"]:
                         csv_data[i][f"{curve_name} Y"] = y_data[i]
 
+                # Add Min and Max Peaks if selected
                 if options["min"]:
                     min_peaks = [(p.pos().x(), p.pos().y()) for p in axis.min.points()]
                     headers.extend([f"Min Peak {curve_name} X", f"Min Peak {curve_name} Y"])
@@ -1430,63 +1432,57 @@ class MainWindow(QtWidgets.QMainWindow):
                         csv_data[i][f"Max Peak {curve_name} X"] = x
                         csv_data[i][f"Max Peak {curve_name} Y"] = y
 
-                # Add TextGrid tier data if available
-                if selected_tiers and self.annotation_data:
-                    for tier_name in selected_tiers:
-                        headers.append(f"TextGrid Tier '{tier_name},{curve_name}'")
-                        tier = self.annotation_data.get_tier_by_name(tier_name)
+                # Calculate the mean for the selected region or tier for this curve
+                if calculation_choices and calculation_choices["calculate_mean"]:
+                    headers.append(f"{curve_name} Mean")
 
-                        # Process each interval in the selected tier
-                        for i, x in enumerate(x_data):
-                            word = ""
-                            for interval in tier.intervals:
-                                if interval.start_time <= x <= interval.end_time:
-                                    word = interval.text
-                                    break
-                            csv_data[i][f"TextGrid Tier '{tier_name},{curve_name}'"] = word
-
-            # Calculate and add duration/mean based on the selected region or TextGrid tier
-            if calculation_choices:
-                if calculation_choices["calculate_duration"] or calculation_choices["calculate_mean"]:
-                    headers.append("Duration")
-                    headers.append("Mean")
-
-                    # If the user selected a specific region or a tier, calculate based on that
                     if calculation_choices["region_or_tier"] == "Region Selection":
+                        # Calculate mean based on the selected region
                         region = self.audio_widget.selection_region.getRegion()
                         region_start, region_end = region
-                        duration = region_end - region_start
-
                         region_y_values = [
                             y for x, y in zip(x_data, y_data) if region_start <= x <= region_end
                         ]
                         mean_value = np.mean(region_y_values) if region_y_values else 0
+                        csv_data[0][f"{curve_name} Mean"] = mean_value
 
-                        csv_data[0]["Duration"] = duration
-                        csv_data[0]["Mean"] = mean_value
                     else:
-                        # Calculate for the selected TextGrid tier
+                        # Calculate mean for the selected TextGrid tier
                         tier_name = calculation_choices["region_or_tier"]
                         tier = self.annotation_data.get_tier_by_name(tier_name)
-                        interval_durations = []
                         interval_means = []
 
                         for interval in tier.intervals:
                             interval_start, interval_end = interval.start_time, interval.end_time
-                            interval_duration = interval_end - interval_start
                             interval_y_values = [
                                 y for x, y in zip(x_data, y_data) if interval_start <= x <= interval_end
                             ]
                             interval_mean = np.mean(interval_y_values) if interval_y_values else 0
-
-                            interval_durations.append(interval_duration)
                             interval_means.append(interval_mean)
 
-                        total_duration = sum(interval_durations)
+                        # Calculate overall mean for the intervals within the tier
                         average_mean = np.mean(interval_means) if interval_means else 0
+                        csv_data[0][f"{curve_name} Mean"] = average_mean
 
-                        csv_data[0]["Duration"] = total_duration
-                        csv_data[0]["Mean"] = average_mean
+            # Calculate duration for the region or tier if needed
+            if calculation_choices and calculation_choices["calculate_duration"]:
+                headers.append("Duration")
+
+                if calculation_choices["region_or_tier"] == "Region Selection":
+                    # Calculate duration based on the selected region
+                    region = self.audio_widget.selection_region.getRegion()
+                    region_start, region_end = region
+                    duration = region_end - region_start
+                    csv_data[0]["Duration"] = duration
+
+                else:
+                    # Calculate duration for the selected TextGrid tier
+                    tier_name = calculation_choices["region_or_tier"]
+                    tier = self.annotation_data.get_tier_by_name(tier_name)
+                    total_duration = sum(
+                        interval.end_time - interval.start_time for interval in tier.intervals
+                    )
+                    csv_data[0]["Duration"] = total_duration
 
             # Write headers and data to the CSV file
             writer.writerow(headers)
