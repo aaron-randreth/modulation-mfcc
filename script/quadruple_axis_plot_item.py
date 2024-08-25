@@ -401,7 +401,7 @@ class Panel(QuadrupleAxisPlotItem):
         super().remove_item(axis_to_be_removed_from, item.max)
 
     def reset(self) -> None:
-        for item in self.rotation.inverse.keys():
+        for item in list(self.rotation.inverse.keys()):
             self.remove_curve(item)
 
 
@@ -464,7 +464,7 @@ class SoundInformation(pg.GraphicsLayoutWidget):
         self.sound_plot.setMouseEnabled(x=True, y=False)
         self.spectrogram_plot.setMouseEnabled(x=True, y=False)
 
-        self.sound_plot.setLimits(xMin=0, yMin=-0.2, yMax=0.2)
+        self.sound_plot.setLimits(xMin=0, yMin=-0.7, yMax=0.7)
         self.spectrogram_plot.setLimits(xMin=0, yMin=0, yMax=5000)
         self.spectrogram_plot.setRange(yRange=(0, 5000))
 
