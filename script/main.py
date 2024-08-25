@@ -746,7 +746,7 @@ class Formant1(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         f_times, f1_values, _, _ = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999, 40
+            parselmouth.Sound(audio_path), 0, 99999, 20
         )
         return f_times, f1_values
 
@@ -756,7 +756,7 @@ class Formant2(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         f_times, _, f2_values, _ = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999, 40
+            parselmouth.Sound(audio_path), 0, 99999, 20
         )
         return f_times, f2_values
 
@@ -766,7 +766,7 @@ class Formant3(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         f_times, _, _, f3_values = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999, 40
+            parselmouth.Sound(audio_path), 0, 99999, 20
         )
         return f_times, f3_values
 
