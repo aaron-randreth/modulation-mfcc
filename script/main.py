@@ -384,15 +384,21 @@ class Dashboard(QtWidgets.QTreeWidget):
         self.addTopLevelItem(item)
         self.row_count += 1
 
-    def reset(self) -> None:
-        self.row_count = 0
-        self.clear()
+
 
     def selected_panel(self, row_idx: int) -> int:
         if row_idx < 0 or row_idx >= self.row_count:
             raise ValueError(f"Incorrect row id given {row_idx}")
+    def reset(self) -> None:
+        # Iterate through the items and remove them
+        for i in reversed(range(self.topLevelItemCount())):
+            item = self.takeTopLevelItem(i)
+            del item  # Ensure the item is deleted from memory
 
-
+        # Reset the row count
+        self.row_count = 0
+        print("Dashboard reset complete.")
+        
 class DashboardWidget(QtWidgets.QWidget):
     dashboard: Dashboard
     row_added = QtCore.pyqtSignal(int)
@@ -416,6 +422,10 @@ class DashboardWidget(QtWidgets.QWidget):
         self.dashboard.append_row()
         self.row_added.emit(self.dashboard.row_count)
 
+    def reset(self) -> None:
+        print("Resetting dashboard widget...")
+        self.dashboard.reset()
+        print("Dashboard widget reset complete.")
 
 class FileLoadIndicator(QtWidgets.QGroupBox):
 
@@ -1584,7 +1594,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if not audio_path:
             return
-
+        self.dashboard_widget.reset()
         self.audio_indicator.file_loaded(audio_path)
 
         self.audio_path = audio_path
@@ -1592,7 +1602,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.audio_widget.set_data(Parselmouth(audio_path))
 
         self.reset_curves()
-
     def load_annotations(self) -> None:
         annotation_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)"
@@ -1697,6 +1706,12 @@ class MainWindow(QtWidgets.QMainWindow):
         assert len(self.panels) > 0
 
         self.curves[new_row_id] = [None, self.panels[0]]
+    def reset_dashboard(self) -> None:
+        self.dashboard_widget.dashboard.reset()
+        # Also clear any internal tracking of curves
+        self.curves.clear()
+
+
 
     def reset_curves(self) -> None:
         self.curves.clear()
