@@ -50,6 +50,7 @@ class ExportCSVDialog(QtWidgets.QDialog):
 
         self.selections = {}
         self.tier_selections = {}
+        self.calculation_choices = {}
 
         # Curve selection
         for axis_id, curve_name in zip(axis_ids, curve_names):
@@ -89,6 +90,31 @@ class ExportCSVDialog(QtWidgets.QDialog):
             tier_group_box.setLayout(tier_group_layout)
             layout.addWidget(tier_group_box)
 
+        # Calculation options
+        calc_group_box = QtWidgets.QGroupBox("Calculations")
+        calc_group_layout = QtWidgets.QFormLayout()
+
+        duration_checkbox = QtWidgets.QCheckBox("Calculate Duration")
+        mean_checkbox = QtWidgets.QCheckBox("Calculate Mean")
+        region_or_tier_combo = QtWidgets.QComboBox()
+        region_or_tier_combo.addItem("Region Selection")
+        if tier_names:
+            region_or_tier_combo.addItems(tier_names)
+
+        calc_group_layout.addRow(duration_checkbox)
+        calc_group_layout.addRow(mean_checkbox)
+        calc_group_layout.addRow(QtWidgets.QLabel("Calculate on:"))
+        calc_group_layout.addRow(region_or_tier_combo)
+
+        calc_group_box.setLayout(calc_group_layout)
+        layout.addWidget(calc_group_box)
+
+        self.calculation_choices = {
+            "duration": duration_checkbox,
+            "mean": mean_checkbox,
+            "region_or_tier": region_or_tier_combo,
+        }
+
         self.ok_button = QtWidgets.QPushButton("Export")
         self.ok_button.clicked.connect(self.accept)
         layout.addWidget(self.ok_button)
@@ -112,6 +138,13 @@ class ExportCSVDialog(QtWidgets.QDialog):
             if checkbox.isChecked():
                 selected_tiers.append(tier_name)
         return selected_tiers
+
+    def get_calculation_choices(self):
+        return {
+            "calculate_duration": self.calculation_choices["duration"].isChecked(),
+            "calculate_mean": self.calculation_choices["mean"].isChecked(),
+            "region_or_tier": self.calculation_choices["region_or_tier"].currentText(),
+        }
 
 
 class POSChannelSelectionDialog(QtWidgets.QDialog):
@@ -1327,7 +1360,6 @@ class MainWindow(QtWidgets.QMainWindow):
             if i < len(axis_ids):
                 curve_names.append(curve_name)
 
-        # Si TextGrid est chargé, permettre la sélection des tiers
         if self.annotation_data:
             tier_names = self.annotation_data.get_tier_names()
             export_dialog = ExportCSVDialog(axis_ids, curve_names, tier_names, self)
@@ -1337,13 +1369,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if export_dialog.exec_() == QtWidgets.QDialog.Accepted:
             selected_data = export_dialog.get_selections()
             selected_tiers = export_dialog.get_selected_tiers()
+            calculation_choices = export_dialog.get_calculation_choices()
 
             csv_path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
             if not csv_path:
                 return
 
-            self.save_curves_to_csv(panel, selected_data, csv_path, axis_ids, curve_names, selected_tiers)
-    def save_curves_to_csv(self, panel, selected_data, csv_path, axis_ids, curve_names, selected_tiers=None):
+            self.save_curves_to_csv(panel, selected_data, csv_path, axis_ids, curve_names, selected_tiers, calculation_choices)
+    def save_curves_to_csv(self, panel, selected_data, csv_path, axis_ids, curve_names, selected_tiers=None, calculation_choices=None):
         with open(csv_path, mode="w", newline="") as file:
             writer = csv.writer(file)
             headers = []
@@ -1359,16 +1392,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 axis = panel.rotation[axis_id]
                 x_data, y_data = axis.curve.getData() if axis.curve is not None else ([], [])
 
-                # Ajout des en-têtes pour chaque courbe
                 if options["x"]:
                     headers.append(f"{curve_name} X")
                 if options["y"]:
                     headers.append(f"{curve_name} Y")
-
-                # Ajout des colonnes TextGrid pour chaque courbe si des tiers sont sélectionnés
-                if selected_tiers:
-                    for tier_name in selected_tiers:
-                        headers.append(f"TextGrid {tier_name} ({curve_name})")
 
                 for i, x in enumerate(x_data):
                     if i not in csv_data:
@@ -1379,25 +1406,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     if options["y"]:
                         csv_data[i][f"{curve_name} Y"] = y_data[i]
 
-                    # Ajout des mots des tiers sélectionnés
-                    if selected_tiers:
-                        for tier_name in selected_tiers:
-                            tier = self.annotation_data.get_tier_by_name(tier_name)
-                            word = ""
-                            # Vérification de quel mot (intervalle) couvre ce point temporel
-                            for interval in tier.intervals:
-                                if interval.start_time <= x <= interval.end_time:
-                                    word = interval.text  # Récupérer le mot de l'intervalle
-                                    break
-                            csv_data[i][f"TextGrid {tier_name} ({curve_name})"] = word
-
-                # Ajout des pics min et max si sélectionnés
                 if options["min"]:
                     min_peaks = [(p.pos().x(), p.pos().y()) for p in axis.min.points()]
                     headers.extend([f"Min Peak {curve_name} X", f"Min Peak {curve_name} Y"])
                     for i, (x, y) in enumerate(min_peaks):
-                        if i not in csv_data:
-                            csv_data[i] = {}
                         csv_data[i][f"Min Peak {curve_name} X"] = x
                         csv_data[i][f"Min Peak {curve_name} Y"] = y
 
@@ -1405,24 +1417,54 @@ class MainWindow(QtWidgets.QMainWindow):
                     max_peaks = [(p.pos().x(), p.pos().y()) for p in axis.max.points()]
                     headers.extend([f"Max Peak {curve_name} X", f"Max Peak {curve_name} Y"])
                     for i, (x, y) in enumerate(max_peaks):
-                        if i not in csv_data:
-                            csv_data[i] = {}
                         csv_data[i][f"Max Peak {curve_name} X"] = x
                         csv_data[i][f"Max Peak {curve_name} Y"] = y
 
-            # Écrire les en-têtes dans le fichier CSV
-            writer.writerow(headers)
+            # Ajout des mots des tiers sélectionnés
+            if selected_tiers and self.annotation_data:
+                for tier_name in selected_tiers:
+                    headers.append(f"TextGrid Tier '{tier_name}'")
+                    tier = self.annotation_data.get_tier_by_name(tier_name)
 
-            # Écrire les données dans le fichier CSV
+                    # Parcourir les intervalles du tier et répéter les mots pour chaque point correspondant
+                    for i, x in enumerate(x_data):
+                        word = ""
+                        # Vérification de quel mot (intervalle) couvre ce point temporel
+                        for interval in tier.intervals:
+                            if interval.start_time <= x <= interval.end_time:
+                                word = interval.text  # Récupérer le mot de l'intervalle
+                                break
+                        csv_data[i][f"TextGrid Tier '{tier_name}'"] = word
+
+            # Calculer et ajouter la durée et/ou la moyenne si sélectionné
+            if calculation_choices:
+                if calculation_choices["calculate_duration"] or calculation_choices["calculate_mean"]:
+                    headers.append("Duration")
+                    headers.append("Mean")
+
+                    region = self.audio_widget.selection_region.getRegion()  # Obtenir la région sélectionnée
+                    region_start, region_end = region
+                    duration = region_end - region_start
+
+                    # Filtrer les valeurs Y qui sont dans la région sélectionnée
+                    region_y_values = [
+                        y for x, y in zip(x_data, y_data) if region_start <= x <= region_end
+                    ]
+
+                    # Calcul de la moyenne et de la durée
+                    mean_value = np.mean(region_y_values) if region_y_values else 0
+
+                    # Stocker les résultats dans la première ligne du CSV (ou là où cela est approprié)
+                    csv_data[0]["Duration"] = duration
+                    csv_data[0]["Mean"] = mean_value
+
+            # Écriture des en-têtes et des données dans le fichier CSV
+            writer.writerow(headers)
             for i in sorted(csv_data.keys()):
                 row = [csv_data[i].get(header, "") for header in headers]
                 writer.writerow(row)
 
-        QtWidgets.QMessageBox.information(
-            self,
-            "Export Successful",
-            f"Data has been successfully exported to {csv_path}",
-        )
+        QtWidgets.QMessageBox.information(self, "Export Successful", f"Data has been successfully exported to {csv_path}")
 
     def analyze_max_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
