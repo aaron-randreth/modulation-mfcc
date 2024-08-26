@@ -756,7 +756,7 @@ class Formant1(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         f_times, f1_values, _, _ = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999, 20
+            parselmouth.Sound(audio_path), 0, 99999, 40
         )
         return f_times, f1_values
 
@@ -766,7 +766,7 @@ class Formant2(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         f_times, _, f2_values, _ = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999, 20
+            parselmouth.Sound(audio_path), 0, 99999, 40
         )
         return f_times, f2_values
 
@@ -776,7 +776,7 @@ class Formant3(DataSource):
     @override
     def calculate(self, audio_path: str) -> tuple[np.ndarray, np.ndarray]:
         f_times, _, _, f3_values = calc_formants(
-            parselmouth.Sound(audio_path), 0, 99999, 20
+            parselmouth.Sound(audio_path), 0, 99999, 40
         )
         return f_times, f3_values
 
@@ -1611,7 +1611,31 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.audio_widget.set_data(Parselmouth(audio_path))
 
+        self.audio_duration = self.get_audio_duration(audio_path)
+
+        self.set_panel_x_limits(self.audio_duration)
+
         self.reset_curves()
+        self.audio_duration = self.get_audio_duration(audio_path)
+
+        self.set_panel_x_limits(self.audio_duration)
+
+        self.reset_curves()
+    def get_audio_duration(self, audio_path: str) -> float:
+        """Retourne la durée de l'audio en secondes en utilisant wave ou scipy"""
+        with wave.open(audio_path, 'rb') as audio_file:
+            num_frames = audio_file.getnframes()
+            sample_rate = audio_file.getframerate()
+            duration = num_frames / float(sample_rate)
+        return duration
+
+    def set_panel_x_limits(self, audio_duration: float) -> None:
+        """Fixer les limites X des panneaux à la durée de l'audio"""
+        for panel in self.panels:
+            viewbox = panel.panel.getViewBox()
+            viewbox.setLimits(xMin=0, xMax=audio_duration)
+        audio_viewbox = self.audio_widget.sound_plot.getViewBox()
+        audio_viewbox.setLimits(xMin=0, xMax=audio_duration)
     def load_annotations(self) -> None:
         annotation_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open TextGrid File", "", "TextGrid Files (*.TextGrid)"
