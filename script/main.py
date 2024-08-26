@@ -862,6 +862,19 @@ class ScatterPlotPlotter(Plotter):
         return CalculationValues(curve, min, max, self.toolbar)
 
 
+class FormantPlotter(Plotter):
+
+    @override
+    def plot(self, x: np.ndarray, y: np.ndarray) -> CalculationValues:
+        curve = pg.ScatterPlotItem(x=x, y=y)
+        min = pg.ScatterPlotItem()
+        max = pg.ScatterPlotItem()
+
+        return CalculationValues(
+            curve, min, max, self.toolbar, default_range=(0, 5500)
+        )
+
+
 class CurveGenerator:
     datasources: list[DataSource]
     derivations: list[Transformation]
@@ -882,9 +895,9 @@ class CurveGenerator:
         self.plotters = [
             None,
             CurvePlotter(self.toolbar),
-            ScatterPlotPlotter(self.toolbar),
-            ScatterPlotPlotter(self.toolbar),
-            ScatterPlotPlotter(self.toolbar),
+            FormantPlotter(self.toolbar),
+            FormantPlotter(self.toolbar),
+            FormantPlotter(self.toolbar),
             CurvePlotter(self.toolbar),
             CurvePlotter(self.toolbar),
                         CurvePlotter(self.toolbar),
@@ -949,7 +962,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = ScatterPlotPlotter(self.toolbar)
+        plotter = FormantPlotter(self.toolbar),
         return plotter.plot(x, y)
 
     def generate_custom_formant3(
@@ -978,7 +991,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = ScatterPlotPlotter(self.toolbar)
+        plotter = FormantPlotter(self.toolbar),
         return plotter.plot(x, y)
 
     def generate_custom_formant1(
@@ -1007,7 +1020,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = ScatterPlotPlotter(self.toolbar)
+        plotter = FormantPlotter(self.toolbar),
         return plotter.plot(x, y)
 
     def generate_custom_mfcc(

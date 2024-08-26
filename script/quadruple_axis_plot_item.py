@@ -131,6 +131,17 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
         self.right_bis.linkedViewChanged(self.left, self.right_bis.XAxis)
         self.left_bis.linkedViewChanged(self.left, self.left_bis.XAxis)
 
+    def set_range(self, axis_id: str, axis_range: tuple[float, float]) -> None:
+        if axis_id not in self.axes:
+            raise ValueError(f"The axis {axis_id} does not exist.")
+
+        axis = self.axes[axis_id]["item"]
+        vb = self.axes[axis_id]["vb"]
+
+        min, max = axis_range
+
+        vb.setYRange(min, max, padding=0)
+
     def add_item(
         self,
         axis_id: str,
@@ -184,6 +195,7 @@ class CalculationValues:
     max: pg.ScatterPlotItem
     toolbar: "ManualPointManagement"  # Reference to the toolbar instance
     threshold: float = 0.2  # Define a threshold for proximity
+    default_range: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(
@@ -383,6 +395,9 @@ class Panel(QuadrupleAxisPlotItem):
         super().add_item(axis_to_be_added_to, item.curve)
         super().add_item(axis_to_be_added_to, item.min)
         super().add_item(axis_to_be_added_to, item.max)
+
+        if item.default_range is not None:
+            super().set_range(axis_to_be_added_to, item.default_range)
 
     def remove_curve(self, item: CalculationValues) -> None:
         if self.item_count == 0:
