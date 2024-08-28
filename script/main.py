@@ -2009,12 +2009,17 @@ class MainWindow(QtWidgets.QMainWindow):
         region = self.audio_widget.selection_region.getRegion()
         start, end = region
         duration = end - start
-        audio = AudioSegment.from_wav(self.audio_path)
-        selected_audio = audio[start * 1000 : end * 1000]
+
+        fs, audio_data = wavfile.read(self.audio_path)
+        if audio_data.ndim > 1:
+            audio_data = audio_data[:, 0]
+
+        selected_audio = audio_data[int(start * fs): int(end * fs)]
 
         def play_audio():
             self.playing = True
-            play(selected_audio)
+            sd.play(selected_audio, fs)
+            sd.wait()
             self.playing = False
 
         threading.Thread(target=play_audio).start()
