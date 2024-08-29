@@ -978,7 +978,6 @@ class CurveGenerator:
         )
 
         plotter = FormantPlotter(self.toolbar)
-
         return plotter.plot(x, y)
 
     def generate_custom_formant3(
@@ -1299,14 +1298,18 @@ class MainWindow(QtWidgets.QMainWindow):
         if not pos_path:
             return
 
-        self.pos_data = read_AG50x(pos_path)
+        # Retrieve target sample rate from the configuration or input field
+        target_sample_rate = self.custom_curves.get('pos_target_sample_rate', 200)  # Default to 200 if not set
+        print(target_sample_rate)
+        # Load the POS file with the specified target sample rate
+        self.pos_data = read_AG50x(pos_path, target_sample_rate=target_sample_rate)
         self.pos_channels = self.pos_data.channels.values
-
         dialog = POSChannelSelectionDialog(self.pos_channels, self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             selected_channels = dialog.get_selected_channels()
 
             self.add_pos_channels_to_dashboard(selected_channels)
+
 
     def add_pos_channels_to_dashboard(self, selected_channels: dict) -> None:
         for original_channel_id, custom_name in selected_channels.items():
@@ -1330,6 +1333,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self, audio_path: str, params: dict, derivation_id: int
     ) -> CalculationValues:
         channel_id = params["channel_id"]
+        target_sample_rate = self.custom_curves.get('pos_target_sample_rate', 200)  # Utilisation du taux d'échantillonnage configuré
+        
         pos_data = self.pos_data.ema.sel(channels=channel_id)
 
         time_axis = pos_data.time.values
@@ -1338,9 +1343,9 @@ class MainWindow(QtWidgets.QMainWindow):
         operation = self.curve_generator.derivations[derivation_id]
         x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
 
-        # Corrected line:
         plotter = CurvePlotter(self.point_management_toolbar)
         return plotter.plot(x, y)
+
 
     def add_curve_widget(self, widget: QtWidgets.QWidget) -> None:
         viewbox = None
@@ -1819,6 +1824,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     "Custom F0",
                     self.curve_generator.generate_custom_f0,
                 )
+            # Handle POS target sample rate setting
+            if "ema" in params:
+                self.custom_curves['pos_target_sample_rate'] = params["ema"].get("target_sample_rate", 200)
 
     def add_custom_curve(
         self, params, panel_id, default_curve_name, generator_function
@@ -2066,7 +2074,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.audio_cursor.setRegion([start, current_pos])
             
             # Calculate the remaining time to avoid excessive CPU usage
-            remaining_time = max(0, (1/200.0) - (time.time() - start_time))  # Assuming 60 FPS
+            remaining_time = max(0, (1/60.0) - (time.time() - start_time))  # Assuming 60 FPS
             time.sleep(remaining_time)
         
         self.stop_audio()
