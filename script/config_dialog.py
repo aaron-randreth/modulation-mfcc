@@ -18,7 +18,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             "Formant1 Configuration", 
             "Formant2 Configuration", 
             "Formant3 Configuration", 
-            "F0 Configuration"
+            "F0 Configuration",
+                    "EMA Configuration"  # New option for EMA Configuration
         ])
         self.config_type_combo.currentIndexChanged.connect(self.display_selected_config)
 
@@ -48,7 +49,8 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         # Adding F0 Configuration panel
         self.f0_widget = self.create_f0_widget()
         self.config_stack.addWidget(self.f0_widget)
-
+        self.ema_widget = self.create_ema_widget()  # Create this new widget
+        self.config_stack.addWidget(self.ema_widget)
         # Buttons
         self.apply_button = QtWidgets.QPushButton("Apply")
         self.apply_button.clicked.connect(self.accept)
@@ -67,9 +69,40 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.setLayout(self.layout)
 
     def display_selected_config(self, index):
-        """Displays the selected configuration panel."""
+        """Displays the selected configuration panel and ensures that all fields are enabled/disabled appropriately."""
         self.config_stack.setCurrentIndex(index)
 
+        # Réactivation des champs pour la configuration sélectionnée
+        if index == 0:  # MFCC
+            self.toggle_mfcc_fields(self.mfcc_enable_checkbox.checkState())
+        elif index == 1:  # Amplitude
+            self.toggle_amp_fields(self.amp_enable_checkbox.checkState())
+        elif index == 2:  # Formant1
+            self.toggle_formant1_fields(self.formant1_enable_checkbox.checkState())
+        elif index == 3:  # Formant2
+            self.toggle_formant2_fields(self.formant2_enable_checkbox.checkState())
+        elif index == 4:  # Formant3
+            self.toggle_formant3_fields(self.formant3_enable_checkbox.checkState())
+        elif index == 5:  # F0
+            self.toggle_f0_fields(self.f0_enable_checkbox.checkState())
+        elif index == 6:  # EMA
+            # Pas de case à cocher pour EMA, donc on active toujours les champs
+            self.ema_target_sample_rate_input[1].setEnabled(True)
+
+    def create_ema_widget(self):
+        """Create the EMA configuration widget."""
+        widget = QtWidgets.QWidget()
+        layout = QtWidgets.QGridLayout(widget)
+
+        # EMA controls
+        self.ema_target_sample_rate_input = self.create_input_field("Target Sample Rate (Hz):", "200")
+
+        # Add EMA widgets to layout
+        self.add_groupbox_to_layout("EMA Configuration", [
+            self.ema_target_sample_rate_input,
+        ], layout, 0, 0)
+
+        return widget
     def create_mfcc_widget(self):
         """Create the MFCC configuration widget."""
         widget = QtWidgets.QWidget()
@@ -543,6 +576,9 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         formant2_enabled = self.formant2_enable_checkbox.isChecked()
         formant3_enabled = self.formant3_enable_checkbox.isChecked()
         f0_enabled = self.f0_enable_checkbox.isChecked()
+        # Récupération des paramètres EMA
+        ema_target_sample_rate = int(self.ema_target_sample_rate_input[1].text())
+        print("Saving EMA target sample rate:", ema_target_sample_rate)  # Debug
 
         params = {
             "mfcc": {
@@ -655,7 +691,11 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "sg_width": int(self.f0_width_input[1].text()),
                 "fin_diff_acc_order": int(self.f0_acc_order_input[1].text()),
                 "sg_poly_order": int(self.f0_poly_order_input[1].text()),
-            }
+            },
+            "ema": {
+            "target_sample_rate": ema_target_sample_rate  # Ajout des paramètres EMA
+        }
+        
         }
         return params
 
@@ -794,10 +834,14 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.f0_width_input[1].setText(str(f0_params.get("sg_width", "")))
             self.f0_acc_order_input[1].setText(str(f0_params.get("fin_diff_acc_order", "")))
             self.f0_poly_order_input[1].setText(str(f0_params.get("sg_poly_order", "")))
-
-    # The other functions like `toggle_mfcc_fields`, `toggle_amp_fields`, etc. 
-    # should remain unchanged, handling the enabling/disabling of relevant fields.
-
+                    # Setting the EMA parameters
+        ema_params = params.get("ema", {})
+        if ema_params:  # Check if ema_params is not empty
+            print("Setting EMA parameters:", ema_params)  # Debug
+            target_sample_rate = ema_params.get("target_sample_rate", 200)
+            self.ema_target_sample_rate_input[1].setText(str(target_sample_rate))
+        else:
+            print("No EMA parameters found")  # Debug
 
     def toggle_mfcc_fields(self, state):
         enabled = state == QtCore.Qt.Checked
