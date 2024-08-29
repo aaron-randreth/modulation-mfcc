@@ -2052,12 +2052,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def animate_cursor(self, start, end, duration):
         start_time = time.time()
-        while self.playing and (time.time() - start_time < duration):
+        end_time = start_time + duration
+
+        while time.time() < end_time:
             elapsed_time = time.time() - start_time
-            current_pos = start + (elapsed_time / duration) * (end - start)
+            current_pos = start + elapsed_time
+            
+            # Ensure that we do not exceed the end position
+            if current_pos > end:
+                current_pos = end
+            
             self.audio_cursor.setRegion([start, current_pos])
-            time.sleep(0.01)  # Adjust this value if necessary
+            
+            # Calculate the remaining time to avoid excessive CPU usage
+            remaining_time = max(0, (1/60.0) - (time.time() - start_time))  # Assuming 60 FPS
+            time.sleep(remaining_time)
+        
         self.stop_audio()
+
 
     def stop_audio(self):
         self.audio_cursor.hide()
