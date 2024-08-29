@@ -35,7 +35,7 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller script/main.py
+        pyinstaller --onefile script/main.py
 
     - name: Upload executable
       if: runner.os == 'Windows'
