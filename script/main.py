@@ -977,7 +977,8 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = FormantPlotter(self.toolbar),
+        plotter = FormantPlotter(self.toolbar)
+
         return plotter.plot(x, y)
 
     def generate_custom_formant3(
@@ -1006,7 +1007,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = FormantPlotter(self.toolbar),
+        plotter = FormantPlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def generate_custom_formant1(
@@ -1035,7 +1036,7 @@ class CurveGenerator:
             params["sg_poly_order"],
         )
 
-        plotter = FormantPlotter(self.toolbar),
+        plotter = FormantPlotter(self.toolbar)
         return plotter.plot(x, y)
 
     def generate_custom_mfcc(
