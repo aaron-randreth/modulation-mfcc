@@ -2052,11 +2052,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def animate_cursor(self, start, end, duration):
         start_time = time.time()
-        while time.time() - start_time < duration:
+        while self.playing and (time.time() - start_time < duration):
             elapsed_time = time.time() - start_time
-            current_pos = start + elapsed_time
+            current_pos = start + (elapsed_time / duration) * (end - start)
             self.audio_cursor.setRegion([start, current_pos])
-            time.sleep(0.01)
+            time.sleep(0.01)  # Adjust this value if necessary
         self.stop_audio()
 
     def stop_audio(self):
