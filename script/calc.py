@@ -166,14 +166,14 @@ def calc_formants(
     }
 
     return time_values_filtered, resampled_formants[1], resampled_formants[2], resampled_formants[3]
-def read_AG50x(path_to_pos_file):
+def read_AG50x(path_to_pos_file,target_sample_rate=200):
     dims = ["x", "z", "y", "phi", "theta", "rms", "extra"]
     channel_sample_size = {
         8: 56,
         16: 112,
         32: 256
     }
-    target_sample_rate = 200  
+
     pos_file = open(path_to_pos_file, mode="rb")
     file_content = pos_file.read()
     pos_file.seek(0)
