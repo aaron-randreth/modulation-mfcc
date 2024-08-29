@@ -2065,7 +2065,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.audio_cursor.setRegion([start, current_pos])
             
             # Calculate the remaining time to avoid excessive CPU usage
-            remaining_time = max(0, (1/60.0) - (time.time() - start_time))  # Assuming 60 FPS
+            remaining_time = max(0, (1/200.0) - (time.time() - start_time))  # Assuming 60 FPS
             time.sleep(remaining_time)
         
         self.stop_audio()
