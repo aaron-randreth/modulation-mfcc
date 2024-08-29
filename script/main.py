@@ -342,7 +342,7 @@ class Dashboard(QtWidgets.QTreeWidget):
         super().__init__()
         self.custom_curves = custom_curves
         self.row_count = 0
-        # Supprime "EMA" de la liste des en-têtes
+        self.pos_channels = []  # Add this line to store POS channels
         self.headers = ["Curves", "Color", "Panel", "Show", "Derivative"]
 
         self.setColumnCount(len(self.headers))
@@ -380,6 +380,21 @@ class Dashboard(QtWidgets.QTreeWidget):
         item.visibility_changed.connect(
             lambda state, row=item.id: self.visibility_changed.emit(row, state)
         )
+
+        # Add default curve types only once
+        default_curve_types = ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]
+        if item._curve_type.count() == 0:  # Only add if the combobox is empty
+            item._curve_type.addItems(default_curve_types)
+
+        # Add custom curves
+        for custom_curve_name in self.custom_curves:
+            if item._curve_type.findText(custom_curve_name) == -1:  # Avoid duplicates
+                item._curve_type.addItem(custom_curve_name)
+        
+        # Add POS channels without duplication
+        for pos_channel in self.pos_channels:
+            if item._curve_type.findText(pos_channel) == -1:  # Avoid duplicates
+                item._curve_type.addItem(pos_channel)
 
         self.addTopLevelItem(item)
         self.row_count += 1
@@ -1297,13 +1312,18 @@ class MainWindow(QtWidgets.QMainWindow):
             channel_id = int(original_channel_id)
             channel_name = custom_name
 
-            self.custom_curves[channel_name] = {
-                "generator_function": self.generate_pos_curve,
-                "params": {"channel_id": channel_id},
-            }
-            for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
-                item = self.dashboard_widget.dashboard.topLevelItem(i)
-                item._curve_type.addItem(channel_name)
+            if channel_name not in self.custom_curves:  # Check for uniqueness
+                self.custom_curves[channel_name] = {
+                    "generator_function": self.generate_pos_curve,
+                    "params": {"channel_id": channel_id},
+                }
+                self.dashboard_widget.dashboard.pos_channels.append(channel_name)  # Save the channel name
+                
+                for i in range(self.dashboard_widget.dashboard.topLevelItemCount()):
+                    item = self.dashboard_widget.dashboard.topLevelItem(i)
+                    if item._curve_type.findText(channel_name) == -1:  # Avoid duplicates
+                        item._curve_type.addItem(channel_name)
+
 
     def generate_pos_curve(
         self, audio_path: str, params: dict, derivation_id: int
