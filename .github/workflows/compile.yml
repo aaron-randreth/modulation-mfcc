@@ -42,7 +42,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: windows-executable
-        path: dist/main # Windows executable
+        path: dist/main.exe # Windows executable
 
     - name: Upload executable
       if: runner.os == 'Linux'
