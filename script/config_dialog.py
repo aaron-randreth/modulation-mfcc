@@ -88,7 +88,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         elif index == 6:  # EMA
             # Pas de case à cocher pour EMA, donc on active toujours les champs
             self.ema_target_sample_rate_input[1].setEnabled(True)
-
     def create_ema_widget(self):
         """Create the EMA configuration widget."""
         widget = QtWidgets.QWidget()
@@ -97,12 +96,24 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         # EMA controls
         self.ema_target_sample_rate_input = self.create_input_field("Target Sample Rate (Hz):", "200")
 
+        # EMA Derivative Controls
+        self.ema_derivative_method_input = self.create_input_field("Derivative Method (grad/sg/finDiff):", "gradient")
+        self.ema_width_input = self.create_input_field("SG Width:", "3")
+        self.ema_acc_order_input = self.create_input_field("Finite Difference Accuracy Order:", "2")
+        self.ema_poly_order_input = self.create_input_field("SG Polynomial Order:", "2")
+
         # Add EMA widgets to layout
         self.add_groupbox_to_layout("EMA Configuration", [
             self.ema_target_sample_rate_input,
+            self.ema_derivative_method_input,
+            self.ema_width_input,
+            self.ema_acc_order_input,
+            self.ema_poly_order_input,
         ], layout, 0, 0)
 
         return widget
+
+
     def create_mfcc_widget(self):
         """Create the MFCC configuration widget."""
         widget = QtWidgets.QWidget()
@@ -693,9 +704,13 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
                 "sg_poly_order": int(self.f0_poly_order_input[1].text()),
             },
             "ema": {
-            "target_sample_rate": ema_target_sample_rate  # Ajout des paramètres EMA
-        }
-        
+                "target_sample_rate": ema_target_sample_rate,
+                "derivative_method": self.ema_derivative_method_input[1].text(),
+                "sg_width": int(self.ema_width_input[1].text()),
+                "fin_diff_acc_order": int(self.ema_acc_order_input[1].text()),
+                "sg_poly_order": int(self.ema_poly_order_input[1].text()),
+            },
+
         }
         return params
 
@@ -835,13 +850,15 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             self.f0_acc_order_input[1].setText(str(f0_params.get("fin_diff_acc_order", "")))
             self.f0_poly_order_input[1].setText(str(f0_params.get("sg_poly_order", "")))
                     # Setting the EMA parameters
+        # Setting the EMA parameters
         ema_params = params.get("ema", {})
-        if ema_params:  # Check if ema_params is not empty
-            print("Setting EMA parameters:", ema_params)  # Debug
-            target_sample_rate = ema_params.get("target_sample_rate", 200)
-            self.ema_target_sample_rate_input[1].setText(str(target_sample_rate))
-        else:
-            print("No EMA parameters found")  # Debug
+        if ema_params:
+            self.ema_target_sample_rate_input[1].setText(str(ema_params.get("target_sample_rate", "")))
+            self.ema_derivative_method_input[1].setText(ema_params.get("derivative_method", ""))
+            self.ema_width_input[1].setText(str(ema_params.get("sg_width", "")))
+            self.ema_acc_order_input[1].setText(str(ema_params.get("fin_diff_acc_order", "")))
+            self.ema_poly_order_input[1].setText(str(ema_params.get("sg_poly_order", "")))
+
 
     def toggle_mfcc_fields(self, state):
         enabled = state == QtCore.Qt.Checked
