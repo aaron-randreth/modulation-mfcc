@@ -37,6 +37,11 @@ jobs:
       run: |
         pyinstaller --onefile script/main.py
 
+    - name: Add execute permission
+      if: runner.os != 'Windows'
+      run: |
+        chmod a+x dist/main
+
     - name: Upload executable
       if: runner.os == 'Windows'
       uses: actions/upload-artifact@v2
