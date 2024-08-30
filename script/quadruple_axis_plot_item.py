@@ -131,16 +131,18 @@ class QuadrupleAxisPlotItem(pg.PlotItem):
         self.right_bis.linkedViewChanged(self.left, self.right_bis.XAxis)
         self.left_bis.linkedViewChanged(self.left, self.left_bis.XAxis)
 
-    def set_range(self, axis_id: str, axis_range: tuple[float, float]) -> None:
+    def set_range(self, axis_id: str, axis_range: tuple[float, float] | None) -> None:
         if axis_id not in self.axes:
             raise ValueError(f"The axis {axis_id} does not exist.")
 
         axis = self.axes[axis_id]["item"]
         vb = self.axes[axis_id]["vb"]
 
-        min, max = axis_range
-
-        vb.setYRange(min, max, padding=0)
+        if  axis_range is not None:
+            min, max = axis_range
+            vb.setYRange(min, max, padding=0)
+        else:
+            vb.enableAutoRange(y=True)
 
     def add_item(
         self,
@@ -396,8 +398,7 @@ class Panel(QuadrupleAxisPlotItem):
         super().add_item(axis_to_be_added_to, item.min)
         super().add_item(axis_to_be_added_to, item.max)
 
-        if item.default_range is not None:
-            super().set_range(axis_to_be_added_to, item.default_range)
+        super().set_range(axis_to_be_added_to, item.default_range)
 
     def remove_curve(self, item: CalculationValues) -> None:
         if self.item_count == 0:
