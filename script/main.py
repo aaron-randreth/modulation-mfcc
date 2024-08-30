@@ -1333,19 +1333,21 @@ class MainWindow(QtWidgets.QMainWindow):
                         item._curve_type.addItem(channel_name)
 
 
-    def generate_pos_curve(
-        self, audio_path: str, params: dict, derivation_id: int
-    ) -> CalculationValues:
+    def generate_pos_curve(self, audio_path: str, params: dict, derivation_id: int) -> CalculationValues:
         channel_id = params["channel_id"]
-        target_sample_rate = self.custom_curves.get('pos_target_sample_rate', 200)  # Utilisation du taux d'échantillonnage configuré
-        
         pos_data = self.pos_data.ema.sel(channels=channel_id)
-
         time_axis = pos_data.time.values
         y_values = pos_data.sel(dimensions="z").values
 
+        derivative_method = self.custom_curves.get('deriva', "gradient")
+        sg_width = self.custom_curves.get('sg', 3)
+        fin_diff_acc_order = self.custom_curves.get('fin_diff_acc', 2)
+        sg_poly_order = self.custom_curves.get('sg_poly', 2)
+
+        print(f"Derivative Method: {derivative_method}, SG Width: {sg_width}, Fin Diff Acc Order: {fin_diff_acc_order}, SG Poly Order: {sg_poly_order}")
+
         operation = self.curve_generator.derivations[derivation_id]
-        x, y = operation.transform(time_axis, y_values, "gradient", 3, 2, 2)
+        x, y = operation.transform(time_axis, y_values, derivative_method, sg_width, fin_diff_acc_order, sg_poly_order)
 
         plotter = CurvePlotter(self.point_management_toolbar)
         return plotter.plot(x, y)
@@ -1688,18 +1690,32 @@ class MainWindow(QtWidgets.QMainWindow):
         curve, current_panel = self.curves.get(row_id, [None, None])
         new_panel = self.panels[new_panel_id]
 
+        # Update the curves dictionary to reflect the new panel
         self.curves[row_id][1] = new_panel
 
         if curve is None:
             return
 
+        # Revert the color of the Y axis in the current panel to the default (black)
         if current_panel is not None:
             try:
+                current_panel.panel.update_y_axis_color(curve, "black")
                 current_panel.panel.remove_curve(curve)
             except ValueError:
                 pass
 
-        new_panel.panel.add_curve(curve)
+        # Set the color of the Y axis in the new panel to the curve's color or default color
+        if new_panel is not None:
+            curve_color = "black"  # Default color if no specific color is set
+
+            # Check if the curve has a 'pen' defined
+            if 'pen' in curve.curve.opts:
+                pen = curve.curve.opts['pen']
+                if pen is not None and hasattr(pen, 'color'):
+                    curve_color = pen.color().name()
+
+            new_panel.panel.add_curve(curve)
+            new_panel.panel.update_y_axis_color(curve, curve_color)
 
     def change_curve_color(self, row_id: int, new_color: str) -> None:
         curve, panel = self.curves.get(row_id, [None, None])
@@ -1781,7 +1797,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.curves.clear()
         for panel in self.panels:
             panel.panel.reset()
-
     def open_config(self):
         dialog = UnifiedConfigDialog(self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
@@ -1828,9 +1843,13 @@ class MainWindow(QtWidgets.QMainWindow):
                     "Custom F0",
                     self.curve_generator.generate_custom_f0,
                 )
-            # Handle POS target sample rate setting
             if "ema" in params:
                 self.custom_curves['pos_target_sample_rate'] = params["ema"].get("target_sample_rate", 200)
+                self.custom_curves['deriva'] = params["ema"].get("derivative_method", "gradient")
+
+                self.custom_curves['sg'] = params["ema"].get("sg_width", 3)
+                self.custom_curves['fin_diff_acc'] = params["ema"].get("fin_diff_acc_order", 2)
+                self.custom_curves['sg_poly'] = params["ema"].get("sg_poly_order", 2)
 
     def add_custom_curve(
         self, params, panel_id, default_curve_name, generator_function
