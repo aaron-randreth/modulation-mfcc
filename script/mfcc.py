@@ -25,6 +25,7 @@ import copy
 
 import inspect
 import pyqtgraph as pg
+#scripts par Leonardo Lancia
 def applyFilter(
                 x,
                 sr,

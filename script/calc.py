@@ -18,6 +18,8 @@ import copy
 
 from findiff import FinDiff
 
+
+#scripts/sources Leonardo Lancia
 def applyFilter(
                  x:npt.NDArray,
                 sr,
@@ -166,6 +168,8 @@ def calc_formants(
     }
 
     return time_values_filtered, resampled_formants[1], resampled_formants[2], resampled_formants[3]
+
+#script Philipp Buech code source : https://github.com/phbuech/adatool
 def read_AG50x(path_to_pos_file,target_sample_rate=200):
     dims = ["x", "z", "y", "phi", "theta", "rms", "extra"]
     channel_sample_size = {
@@ -213,7 +217,7 @@ def read_AG50x(path_to_pos_file,target_sample_rate=200):
         )
     )
     return ema_data
-
+#scripts Leonardo Lancia
 def calculate_amplitude_envelope(
                     x:npt.NDArray,
                     sr:float, 

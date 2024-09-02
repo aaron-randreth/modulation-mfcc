@@ -19,39 +19,32 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
             "Formant2 Configuration", 
             "Formant3 Configuration", 
             "F0 Configuration",
-                    "EMA Configuration"  # New option for EMA Configuration
+                    "EMA Configuration" 
         ])
         self.config_type_combo.currentIndexChanged.connect(self.display_selected_config)
 
-        # Stack widget to hold different configurations
         self.config_stack = QtWidgets.QStackedWidget()
 
-        # Adding MFCC Configuration panel
         self.mfcc_widget = self.create_mfcc_widget()
         self.config_stack.addWidget(self.mfcc_widget)
 
-        # Adding Amplitude Configuration panel
         self.amp_widget = self.create_amp_widget()
         self.config_stack.addWidget(self.amp_widget)
 
-        # Adding Formant1 Configuration panel
         self.formant1_widget = self.create_formant1_widget()
         self.config_stack.addWidget(self.formant1_widget)
 
-        # Adding Formant2 Configuration panel
         self.formant2_widget = self.create_formant2_widget()
         self.config_stack.addWidget(self.formant2_widget)
 
-        # Adding Formant3 Configuration panel
         self.formant3_widget = self.create_formant3_widget()
         self.config_stack.addWidget(self.formant3_widget)
 
-        # Adding F0 Configuration panel
         self.f0_widget = self.create_f0_widget()
         self.config_stack.addWidget(self.f0_widget)
-        self.ema_widget = self.create_ema_widget()  # Create this new widget
+        self.ema_widget = self.create_ema_widget()  
         self.config_stack.addWidget(self.ema_widget)
-        # Buttons
+
         self.apply_button = QtWidgets.QPushButton("Apply")
         self.apply_button.clicked.connect(self.accept)
         self.save_button = QtWidgets.QPushButton("Save Config")
@@ -59,7 +52,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.load_button = QtWidgets.QPushButton("Load Config")
         self.load_button.clicked.connect(self.load_config)
 
-        # Layout
         self.layout.addWidget(self.config_type_combo)
         self.layout.addWidget(self.config_stack)
         self.layout.addWidget(self.apply_button)
@@ -72,7 +64,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         """Displays the selected configuration panel and ensures that all fields are enabled/disabled appropriately."""
         self.config_stack.setCurrentIndex(index)
 
-        # Réactivation des champs pour la configuration sélectionnée
         if index == 0:  # MFCC
             self.toggle_mfcc_fields(self.mfcc_enable_checkbox.checkState())
         elif index == 1:  # Amplitude
@@ -86,7 +77,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         elif index == 5:  # F0
             self.toggle_f0_fields(self.f0_enable_checkbox.checkState())
         elif index == 6:  # EMA
-            # Pas de case à cocher pour EMA, donc on active toujours les champs
+
             self.ema_target_sample_rate_input[1].setEnabled(True)
     def create_ema_widget(self):
         """Create the EMA configuration widget."""
@@ -120,7 +111,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         layout = QtWidgets.QGridLayout(widget)
 
         # MFCC controls
-        self.mfcc_enable_checkbox = QtWidgets.QCheckBox("Enable MFCC Customization")
+        self.mfcc_enable_checkbox = QtWidgets.QCheckBox("Enable Mod Cepstr Customization")
         self.mfcc_enable_checkbox.setChecked(False)
         self.mfcc_enable_checkbox.stateChanged.connect(self.toggle_mfcc_fields)
 
@@ -166,7 +157,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
 
         self.toggle_mfcc_fields(self.mfcc_enable_checkbox.checkState())
 
-        # Add all MFCC widgets to layout
         self.add_groupbox_to_layout("MFCC Configuration", [
             self.mfcc_enable_checkbox,
             self.mfcc_sample_rate_input,
@@ -200,13 +190,13 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         layout = QtWidgets.QGridLayout(widget)
 
         # Amplitude controls
-        self.amp_enable_checkbox = QtWidgets.QCheckBox("Enable Amplitude Customization")
+        self.amp_enable_checkbox = QtWidgets.QCheckBox("Enable ENV AMP Customization")
         self.amp_enable_checkbox.setChecked(False)
         self.amp_enable_checkbox.stateChanged.connect(self.toggle_amp_fields)
 
         self.amp_method_input = self.create_input_field("Method (RMS/Hilb/RMSpraat):", "RMS")
         self.amp_winlen_input = self.create_input_field("Window Length (s):", "0.1")
-        self.amp_hoplen_input = self.create_input_field("Hop Length (s):", "0.01")
+        self.amp_hoplen_input = self.create_input_field("Hop Length (s):", "0.005")
         self.amp_center_input = self.create_input_field("Center (True/False):", "True")
         self.amp_outfilter_input = self.create_input_field("Output Filter (None/iir/fir/sg):", "None")
         self.amp_outfilt_type_input = self.create_input_field("Filter Type (low/band):", "low")
@@ -241,7 +231,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
 
         self.toggle_amp_fields(self.amp_enable_checkbox.checkState())
 
-        # Add all Amplitude widgets to layout
         self.add_groupbox_to_layout("Amplitude Configuration", [
             self.amp_enable_checkbox,
             self.amp_method_input,
@@ -274,7 +263,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant1_enable_checkbox.setChecked(False)
         self.formant1_enable_checkbox.stateChanged.connect(self.toggle_formant1_fields)
 
-        self.formant1_energy_threshold_input = self.create_input_field("Energy Threshold:", "20.0")
+        self.formant1_energy_threshold_input = self.create_input_field("Energy Threshold:", "40.0")
         self.formant1_tstep_input = self.create_input_field("Time Step (s):", "0.005")
         self.formant1_max_num_formants_input = self.create_input_field("Max Number of Formants:", "5")
         self.formant1_max_formant_input = self.create_input_field("Maximum Formant (Hz):", "5500.0")
@@ -308,7 +297,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
 
         self.toggle_formant1_fields(self.formant1_enable_checkbox.checkState())
 
-        # Add all Formant1 widgets to layout
         self.add_groupbox_to_layout("Formant1 Configuration", [
             self.formant1_enable_checkbox,
             self.formant1_energy_threshold_input,
@@ -338,7 +326,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant2_enable_checkbox.setChecked(False)
         self.formant2_enable_checkbox.stateChanged.connect(self.toggle_formant2_fields)
 
-        self.formant2_energy_threshold_input = self.create_input_field("Energy Threshold:", "20.0")
+        self.formant2_energy_threshold_input = self.create_input_field("Energy Threshold:", "40.0")
         self.formant2_tstep_input = self.create_input_field("Time Step (s):", "0.005")
         self.formant2_max_num_formants_input = self.create_input_field("Max Number of Formants:", "5")
         self.formant2_max_formant_input = self.create_input_field("Maximum Formant (Hz):", "5500.0")
@@ -372,7 +360,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
 
         self.toggle_formant2_fields(self.formant2_enable_checkbox.checkState())
 
-        # Add all Formant2 widgets to layout
         self.add_groupbox_to_layout("Formant2 Configuration", [
             self.formant2_enable_checkbox,
             self.formant2_energy_threshold_input,
@@ -402,7 +389,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.formant3_enable_checkbox.setChecked(False)
         self.formant3_enable_checkbox.stateChanged.connect(self.toggle_formant3_fields)
 
-        self.formant3_energy_threshold_input = self.create_input_field("Energy Threshold:", "20.0")
+        self.formant3_energy_threshold_input = self.create_input_field("Energy Threshold:", "40.0")
         self.formant3_tstep_input = self.create_input_field("Time Step (s):", "0.005")
         self.formant3_max_num_formants_input = self.create_input_field("Max Number of Formants:", "5")
         self.formant3_max_formant_input = self.create_input_field("Maximum Formant (Hz):", "5500.0")
@@ -436,7 +423,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
 
         self.toggle_formant3_fields(self.formant3_enable_checkbox.checkState())
 
-        # Add all Formant3 widgets to layout
         self.add_groupbox_to_layout("Formant3 Configuration", [
             self.formant3_enable_checkbox,
             self.formant3_energy_threshold_input,
@@ -467,7 +453,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         self.f0_enable_checkbox.stateChanged.connect(self.toggle_f0_fields)
 
         self.f0_method_input = self.create_input_field("Method (praatac/pyin):", "praatac")
-        self.f0_hop_size_input = self.create_input_field("Hop Size (s):", "0.01")
+        self.f0_hop_size_input = self.create_input_field("Hop Size (s):", "0.005")
         self.f0_min_pitch_input = self.create_input_field("Min Pitch (Hz):", "75")
         self.f0_max_pitch_input = self.create_input_field("Max Pitch (Hz):", "600")
         self.f0_interp_unvoiced_input = self.create_input_field("Interp Unvoiced (None/linear):", "linear")
@@ -504,7 +490,6 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
 
         self.toggle_f0_fields(self.f0_enable_checkbox.checkState())
 
-        # Add all F0 widgets to layout
         self.add_groupbox_to_layout("F0 Configuration", [
             self.f0_enable_checkbox,
             self.f0_method_input,
@@ -587,7 +572,7 @@ class UnifiedConfigDialog(QtWidgets.QDialog):
         formant2_enabled = self.formant2_enable_checkbox.isChecked()
         formant3_enabled = self.formant3_enable_checkbox.isChecked()
         f0_enabled = self.f0_enable_checkbox.isChecked()
-        # Récupération des paramètres EMA
+
         ema_target_sample_rate = int(self.ema_target_sample_rate_input[1].text())
         print("Saving EMA target sample rate:", ema_target_sample_rate)  # Debug
 

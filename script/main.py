@@ -364,6 +364,8 @@ class Dashboard(QtWidgets.QTreeWidget):
         #     self.append_row()
     def resize_column(self) -> None:
         # Ajustez les indices des colonnes maintenant qu'il n'y a plus d'EMA
+        self.setColumnWidth(self.headers.index("Curves"), 150)
+
         self.setColumnWidth(self.headers.index("Color"), 90)
         self.setColumnWidth(self.headers.index("Panel"), 50)
         self.setColumnWidth(self.headers.index("Show"), 20)
@@ -385,7 +387,6 @@ class Dashboard(QtWidgets.QTreeWidget):
             lambda state, row=item.id: self.visibility_changed.emit(row, state)
         )
 
-        # Add default curve types only once
         default_curve_types = ["Choose", "Mod_Cepstr", "F1", "F2", "F3", "F0", "ENV_AMP"]
         if item._curve_type.count() == 0:  # Only add if the combobox is empty
             item._curve_type.addItems(default_curve_types)
@@ -1571,11 +1572,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     for i, (px, py) in enumerate(zip(peak_x, peak_y))
                 ]
             )
-            QtWidgets.QMessageBox.information(
-                self,
-                "Peak Analysis",
-                f"Peaks in Panel {panel_id + 1} (Selected Region):\n\n{peak_info}",
-            )
+
 
     def analyze_min_peaks(self) -> None:
         panel_id = self.point_management_toolbar.panel
@@ -1609,11 +1606,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     f"Minimum {i + 1}: X = {px}, Y = {py}"
                     for i, (px, py) in enumerate(zip(peak_x, peak_y))
                 ]
-            )
-            QtWidgets.QMessageBox.information(
-                self,
-                "Minimum Peak Analysis",
-                f"Minima in Panel {panel_id + 1} (Selected Region):\n\n{min_info}",
             )
 
     def create_spectrogram_checkbox(self) -> QtWidgets.QGroupBox:
