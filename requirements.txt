@@ -10,6 +10,4 @@ bidict
 findiff
 sounddevice
 pydub
-bidict
-findiff
 
