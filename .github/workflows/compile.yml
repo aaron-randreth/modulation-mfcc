@@ -44,21 +44,21 @@ jobs:
 
     - name: Upload executable
       if: runner.os == 'Windows'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: windows-executable
         path: dist/main.exe # Windows executable
 
     - name: Upload executable
       if: runner.os == 'Linux'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: linux-executable
         path: dist/main  # Linux executable (no extension)
 
     - name: Upload executable
       if: runner.os == 'macOS'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: macos-executable
         path: dist/main  # macOS executable (no extension)
