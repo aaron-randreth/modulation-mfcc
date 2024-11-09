@@ -56,10 +56,3 @@ jobs:
         name: linux-executable
         path: dist/main  # Linux executable (no extension)
 
-    - name: Upload executable
-      if: runner.os == 'macOS'
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-executable
-        path: dist/main  # macOS executable (no extension)
-
